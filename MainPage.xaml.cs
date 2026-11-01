@@ -357,14 +357,9 @@ public partial class MainPage : ContentPage
         if (ItemOf(sender) is not FileItem item) return;
         if (IsSelectionMode) return;
 
-        // 目录长按不进多选，直接给操作菜单（新建子文件夹 / 重命名 / 删除）；
-        // 文件长按才是多选，避免两种手势互相打架。
-        if (item.IsDirectory)
-        {
-            Dispatcher.Dispatch(() => _ = ShowDirectoryMenuAsync(item));
-            return;
-        }
-
+        // PointerPressed 在按下的瞬间就触发了，所以这里只启动计时器，
+        // 等 420ms 才判定为长按：目录弹操作菜单，文件进多选。
+        // 短按直接交给 OnItemTapped（目录=进入）。
         _pressTimer?.Stop();
         _pressTimer = Dispatcher.CreateTimer();
         _pressTimer.Interval = TimeSpan.FromMilliseconds(420);
@@ -372,7 +367,9 @@ public partial class MainPage : ContentPage
         {
             _pressTimer?.Stop();
             _suppressNextTap = true;   // 长按后松开还会冒一次 Tap，屏蔽掉
-            EnterSelection(item);
+
+            if (item.IsDirectory) _ = ShowDirectoryMenuAsync(item);
+            else EnterSelection(item);
         };
         _pressTimer.Start();
     }
