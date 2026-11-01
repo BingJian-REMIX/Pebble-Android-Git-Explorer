@@ -1,0 +1,92 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<!-- 双目标：Windows 可直接跑；Android 见 README「切到 Android」（原生 libgit2 是唯一门槛） -->
+		<TargetFrameworks>net10.0-android;net10.0-windows10.0.19041.0</TargetFrameworks>
+
+		<!-- 本机 Android 环境路径。换机器/交给别人时删掉这两行，改用 ANDROID_HOME / JAVA_HOME 环境变量。 -->
+		<AndroidSdkDirectory Condition="'$(AndroidSdkDirectory)' == ''">D:\AndroidSdk</AndroidSdkDirectory>
+		<JavaSdkDirectory Condition="'$(JavaSdkDirectory)' == ''">E:\VSstopmashanhi\JAVA 17</JavaSdkDirectory>
+
+		<OutputType>Exe</OutputType>
+		<RootNamespace>Pebble</RootNamespace>
+		<UseMaui>true</UseMaui>
+		<SingleProject>true</SingleProject>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+
+		<!-- Display name -->
+		<ApplicationTitle>Pebble</ApplicationTitle>
+
+		<!-- App Identifier -->
+		<ApplicationId>com.pebble.app</ApplicationId>
+
+		<!-- Versions -->
+		<ApplicationDisplayVersion>0.1</ApplicationDisplayVersion>
+		<ApplicationVersion>1</ApplicationVersion>
+
+		<WindowsPackageType>None</WindowsPackageType>
+
+		<!-- 手动 adb install / 传 APK 安装时必须内嵌程序集。
+		     Debug 默认 Fast Deployment 会把 dll 放到 files/.__override__ 由 IDE 推送，
+		     脱离 IDE 安装就找不到程序集，启动直接 SIGABRT。 -->
+		<EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
+
+		<!-- Release：AOT 要求必须开裁剪，所以用 partial（只裁完全没用到的程序集），
+		     并把 LibGit2Sharp 整体钉住——它靠反射和 P/Invoke，激进裁剪会让 Commit/Status 在运行期炸。 -->
+		<PublishTrimmed Condition="'$(Configuration)' == 'Release'">true</PublishTrimmed>
+		<TrimMode Condition="'$(Configuration)' == 'Release'">partial</TrimMode>
+
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+		<TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- 图标用位图：Include 是完整图标（黑底 + 图案，圆角透明），
+		     前景给 1x1 透明占位，这样 Android 自适应图标直接用整张图，
+		     不会被 Resizetizer 二次缩到 66% 而变小。 -->
+		<MauiIcon Include="Resources\AppIcon\appicon.png" ForegroundFile="Resources\AppIcon\appiconfg.png" Color="#07090F" />
+		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#07090F" BaseSize="128,128" />
+		<MauiFont Include="Resources\Fonts\*" />
+		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+	</ItemGroup>
+
+	<!-- Release 只做 partial 裁剪，LibGit2Sharp 必须整体保留，否则运行期反射失败 -->
+	<ItemGroup Condition="'$(Configuration)' == 'Release'">
+		<TrimmerRootAssembly Include="LibGit2Sharp" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
+		<PackageReference Include="LibGit2Sharp" Version="0.32.0" />
+		<!-- Windows/macOS/Linux 的原生库由 LibGit2Sharp.NativeBinaries 自带的 runtimes 提供。
+		     Android 不包含（官方包无 android RID，Redpoint 的第三方包也没有），
+		     需要自行提供 libgit2-5853918.so，详见 README「切到 Android」。 -->
+	</ItemGroup>
+
+	<!-- Android 上必须屏蔽官方 NativeBinaries 的 runtime 资产：
+	     .NET Android 的 RID 兜底会把 linux-arm64 的 glibc 版当成 android 库塞进 APK，
+	     它会先于我们的自编库占位（XA4301），真机 dlopen 必失败。 -->
+	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+		<PackageReference Include="LibGit2Sharp.NativeBinaries" Version="2.0.324" ExcludeAssets="runtime" />
+	</ItemGroup>
+
+	<!-- 从 NuGet 的 runtime 资产里剔除 glibc 版 libgit2，否则它会先占住 lib/<abi>/ 的位置（XA4301） -->
+	<Target Name="PebbleDropForeignGit2" AfterTargets="ResolvePackageAssets"
+	        Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+		<ItemGroup>
+			<NativeCopyLocalItems Remove="@(NativeCopyLocalItems)" Condition="'%(Filename)' == 'libgit2-5853918'" />
+			<RuntimeCopyLocalItems Remove="@(RuntimeCopyLocalItems)" Condition="'%(Filename)' == 'libgit2-5853918'" />
+		</ItemGroup>
+		<Message Importance="high" Text="Pebble: dropped glibc libgit2 from package assets" />
+	</Target>
+
+	<ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+		<AndroidNativeLibrary Include="Platforms\Android\libs\arm64-v8a\libgit2-5853918.so">
+			<Abi>arm64-v8a</Abi>
+		</AndroidNativeLibrary>
+	</ItemGroup>
+
+</Project>

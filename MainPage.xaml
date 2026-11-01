@@ -1,0 +1,388 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:Pebble"
+             xmlns:models="clr-namespace:Pebble.Models"
+             x:Class="Pebble.MainPage"
+             x:DataType="local:MainPage"
+             BackgroundColor="{AppThemeBinding Light=#F7F8FC, Dark=#07090F}"
+             NavigationPage.HasNavigationBar="False">
+
+    <Grid>
+
+        <Grid RowDefinitions="Auto,*,Auto">
+
+            <!-- ==================== 顶部：浏览模式 ==================== -->
+            <Grid Grid.Row="0"
+                  IsVisible="{Binding IsBrowseMode}"
+                  ColumnDefinitions="40,*,Auto"
+                  ColumnSpacing="10"
+                  Padding="{OnPlatform Default='16,18,16,10', Android='16,44,16,10'}">
+
+                <Border WidthRequest="32" HeightRequest="32"
+                        BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#10131C}"
+                        Stroke="{AppThemeBinding Light=#DCE1EC, Dark=#1E2434}" StrokeThickness="1"
+                        VerticalOptions="Center">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="10" />
+                    </Border.StrokeShape>
+                    <Label Text="←" FontSize="16" TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}"
+                           HorizontalOptions="Center" VerticalOptions="Center">
+                        <Label.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnUpTapped" />
+                        </Label.GestureRecognizers>
+                    </Label>
+                </Border>
+
+                <VerticalStackLayout Grid.Column="1" Spacing="3" VerticalOptions="Center">
+                    <Label Text="PEBBLE" FontSize="9" CharacterSpacing="4.5"
+                           TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" FontAttributes="Bold" />
+                    <Label Text="{Binding CurrentPath}" FontSize="13"
+                           TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}"
+                           LineBreakMode="TailTruncation" />
+                </VerticalStackLayout>
+
+                <HorizontalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
+                    <BoxView WidthRequest="5" HeightRequest="5" CornerRadius="2.5"
+                             Color="{AppThemeBinding Light=#5B4BE0, Dark=#7C5CFF}" VerticalOptions="Center" />
+                    <Label Text="{Binding BranchName}" FontSize="12"
+                           TextColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" VerticalOptions="Center" />
+                </HorizontalStackLayout>
+            </Grid>
+
+            <!-- ==================== 顶部：多选上下文栏 ==================== -->
+            <VerticalStackLayout Grid.Row="0"
+                                 IsVisible="{Binding IsSelectionMode}"
+                                 Spacing="10"
+                                 Padding="{OnPlatform Default='16,18,16,10', Android='16,44,16,10'}">
+
+                <Grid ColumnDefinitions="40,*,Auto">
+                    <Border WidthRequest="32" HeightRequest="32"
+                            BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#10131C}"
+                            Stroke="{AppThemeBinding Light=#DCE1EC, Dark=#1E2434}" StrokeThickness="1">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="10" />
+                        </Border.StrokeShape>
+                        <Label Text="✕" FontSize="13"
+                               TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}"
+                               HorizontalOptions="Center" VerticalOptions="Center">
+                            <Label.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnExitSelectionTapped" />
+                            </Label.GestureRecognizers>
+                        </Label>
+                    </Border>
+
+                    <Label Grid.Column="1" Text="{Binding SelectionSummary}" FontSize="14"
+                           FontAttributes="Bold" VerticalOptions="Center"
+                           TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}" />
+
+                    <Label Grid.Column="2" Text="全选" FontSize="12" VerticalOptions="Center"
+                           TextColor="{AppThemeBinding Light=#5B4BE0, Dark=#7C5CFF}">
+                        <Label.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnSelectAllTapped" />
+                        </Label.GestureRecognizers>
+                    </Label>
+                </Grid>
+
+                <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="6">
+                    <Button Grid.Column="0" Text="复制" Clicked="OnCopyTapped" Style="{StaticResource CtxButton}" />
+                    <Button Grid.Column="1" Text="移动" Clicked="OnMoveTapped" Style="{StaticResource CtxButton}" />
+                    <Button Grid.Column="2" Text="删除" Clicked="OnDeleteTapped" Style="{StaticResource CtxButton}" />
+                    <Button Grid.Column="3" Text="重命名" Clicked="OnRenameTapped" Style="{StaticResource CtxButton}" />
+                    <Button Grid.Column="4" Text="压缩" Clicked="OnCompressTapped" Style="{StaticResource CtxButton}" />
+                </Grid>
+            </VerticalStackLayout>
+
+            <!-- ==================== 文件列表 + FAB ==================== -->
+            <Grid Grid.Row="1">
+                <RefreshView IsRefreshing="{Binding IsLoading, Mode=TwoWay}"
+                             Command="{Binding RefreshCommand}"
+                             RefreshColor="{AppThemeBinding Light=#5B4BE0, Dark=#7C5CFF}">
+
+                    <CollectionView ItemsSource="{Binding Items}" SelectionMode="None">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="models:FileItem">
+                                <Grid ColumnDefinitions="22,*,Auto"
+                                      ColumnSpacing="12"
+                                      Padding="16,13"
+                                      BackgroundColor="{Binding RowBackground}"
+                                      Loaded="OnItemLoaded">
+
+                                    <Grid.GestureRecognizers>
+                                        <TapGestureRecognizer Tapped="OnItemTapped" />
+                                        <PointerGestureRecognizer PointerPressed="OnItemPressed"
+                                                                  PointerReleased="OnItemReleased"
+                                                                  PointerExited="OnItemReleased" />
+                                    </Grid.GestureRecognizers>
+
+                                    <Grid WidthRequest="20" HeightRequest="20" VerticalOptions="Center">
+                                        <Path IsVisible="{Binding IsDirectory}"
+                                              Aspect="Uniform"
+                                              Stroke="{AppThemeBinding Light=#5B4BE0, Dark=#7C5CFF}"
+                                              StrokeThickness="1.5"
+                                              StrokeLineJoin="Round"
+                                              Fill="Transparent"
+                                              Data="M2,5.5 C2,4.7 2.7,4 3.5,4 L7,4 L8.8,5.9 L16.5,5.9 C17.3,5.9 18,6.6 18,7.4 L18,14.6 C18,15.4 17.3,16.1 16.5,16.1 L3.5,16.1 C2.7,16.1 2,15.4 2,14.6 Z" />
+                                        <Path IsVisible="{Binding IsFile}"
+                                              Aspect="Uniform"
+                                              Stroke="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}"
+                                              StrokeThickness="1.5"
+                                              StrokeLineJoin="Round"
+                                              Fill="Transparent"
+                                              Data="M4.5,2 L11.5,2 L16,6.5 L16,16.5 L4.5,16.5 Z M11.5,2 L11.5,6.5 L16,6.5" />
+                                    </Grid>
+
+                                    <Label Grid.Column="1"
+                                           Text="{Binding Name}"
+                                           FontSize="15"
+                                           VerticalOptions="Center"
+                                           LineBreakMode="MiddleTruncation"
+                                           TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}" />
+
+                                    <HorizontalStackLayout Grid.Column="2" Spacing="8" VerticalOptions="Center">
+                                        <!-- 多选态标记 -->
+                                        <Border IsVisible="{Binding IsSelected}"
+                                                WidthRequest="16" HeightRequest="16"
+                                                BackgroundColor="{AppThemeBinding Light=#5B4BE0, Dark=#7C5CFF}"
+                                                StrokeThickness="0">
+                                            <Border.StrokeShape>
+                                                <Ellipse />
+                                            </Border.StrokeShape>
+                                            <Label Text="✓" FontSize="9" TextColor="#FFFFFF" FontAttributes="Bold"
+                                                   HorizontalOptions="Center" VerticalOptions="Center" />
+                                        </Border>
+
+                                        <Border IsVisible="{Binding HasChanges}"
+                                                Padding="7,2"
+                                                StrokeThickness="0"
+                                                BackgroundColor="{Binding GitStatus, Converter={StaticResource StatusColor}, ConverterParameter=bg}">
+                                            <Border.StrokeShape>
+                                                <RoundRectangle CornerRadius="6" />
+                                            </Border.StrokeShape>
+                                            <Label Text="{Binding StatusLetter}"
+                                                   FontSize="10"
+                                                   FontAttributes="Bold"
+                                                   CharacterSpacing="0.5"
+                                                   TextColor="{Binding GitStatus, Converter={StaticResource StatusColor}, ConverterParameter=fg}" />
+                                        </Border>
+                                    </HorizontalStackLayout>
+                                </Grid>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+
+                        <CollectionView.EmptyView>
+                            <VerticalStackLayout Padding="24,60" Spacing="6">
+                                <Label Text="空目录" FontSize="14" HorizontalOptions="Center"
+                                       TextColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" />
+                                <Label Text="下拉刷新 · 右下角新建" FontSize="12" HorizontalOptions="Center"
+                                       TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" />
+                            </VerticalStackLayout>
+                        </CollectionView.EmptyView>
+                    </CollectionView>
+                </RefreshView>
+
+                <!-- FAB 组 -->
+                <VerticalStackLayout IsVisible="{Binding IsBrowseMode}"
+                                     HorizontalOptions="End" VerticalOptions="End"
+                                     Margin="{Binding FabMargin}" Spacing="14">
+
+                    <!-- Git 抽屉 FAB + 变更数角标 -->
+                    <Grid WidthRequest="56" HeightRequest="56">
+                        <Border x:Name="GitFab" StrokeThickness="0">
+                            <Border.StrokeShape>
+                                <Ellipse />
+                            </Border.StrokeShape>
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#7C5CFF" Offset="0.0" />
+                                    <GradientStop Color="#3B82F6" Offset="1.0" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <Label Text="⎇" FontSize="24" TextColor="#FFFFFF"
+                                   HorizontalOptions="Center" VerticalOptions="Center">
+                                <Label.GestureRecognizers>
+                                    <TapGestureRecognizer Tapped="OnGitFabTapped" />
+                                </Label.GestureRecognizers>
+                            </Label>
+                        </Border>
+
+                        <Border IsVisible="{Binding HasChanges}"
+                                WidthRequest="20" HeightRequest="20"
+                                BackgroundColor="#EF4444" StrokeThickness="0"
+                                HorizontalOptions="End" VerticalOptions="Start"
+                                Margin="0,-2,-2,0">
+                            <Border.StrokeShape>
+                                <Ellipse />
+                            </Border.StrokeShape>
+                            <Label Text="{Binding ChangeCount}" FontSize="10" TextColor="#FFFFFF"
+                                   FontAttributes="Bold"
+                                   HorizontalOptions="Center" VerticalOptions="Center" />
+                        </Border>
+                    </Grid>
+
+                    <!-- 新建 FAB -->
+                    <Border x:Name="NewFab" WidthRequest="56" HeightRequest="56"
+                            BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#161A26}"
+                            Stroke="{AppThemeBinding Light=#DCE1EC, Dark=#232838}" StrokeThickness="1">
+                        <Border.StrokeShape>
+                            <Ellipse />
+                        </Border.StrokeShape>
+                        <Border.Shadow>
+                            <Shadow Brush="#000000" Offset="0,8" Radius="20" Opacity="0.4" />
+                        </Border.Shadow>
+                        <Label Text="+" FontSize="28"
+                               TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}"
+                               HorizontalOptions="Center" VerticalOptions="Center">
+                            <Label.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnNewFabTapped" />
+                            </Label.GestureRecognizers>
+                        </Label>
+                    </Border>
+                </VerticalStackLayout>
+            </Grid>
+
+            <!-- ==================== 剪贴板：粘贴条 ==================== -->
+            <Border Grid.Row="2"
+                    IsVisible="{Binding ClipboardVisible}"
+                    Margin="12,0,12,12" Padding="14,10"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#10131C}"
+                    Stroke="{AppThemeBinding Light=#DCE1EC, Dark=#1E2434}"
+                    StrokeThickness="1">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="16" />
+                </Border.StrokeShape>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                    <Label Text="{Binding ClipboardSummary}" FontSize="12" VerticalOptions="Center"
+                           LineBreakMode="TailTruncation"
+                           TextColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" />
+                    <Button Grid.Column="1" Text="粘贴到此处" Clicked="OnPasteTapped"
+                            HeightRequest="34" CornerRadius="10" FontSize="12"
+                            FontAttributes="Bold" TextColor="#FFFFFF" Padding="14,0">
+                        <Button.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#7C5CFF" Offset="0.0" />
+                                <GradientStop Color="#3B82F6" Offset="1.0" />
+                            </LinearGradientBrush>
+                        </Button.Background>
+                    </Button>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ==================== Git 抽屉覆盖层 ==================== -->
+        <Grid x:Name="SheetOverlay" IsVisible="False" Opacity="0">
+            <BoxView Color="#99000000">
+                <BoxView.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnSheetBackdropTapped" />
+                </BoxView.GestureRecognizers>
+            </BoxView>
+
+            <Border x:Name="SheetPanel"
+                    VerticalOptions="End"
+                    HeightRequest="480"
+                    TranslationY="520"
+                    StrokeThickness="0"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#0D1018}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="26,26,0,0" />
+                </Border.StrokeShape>
+
+                <Grid RowDefinitions="Auto,*,Auto,Auto" Padding="18,14,18,18" RowSpacing="12">
+
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+                        <VerticalStackLayout Spacing="3">
+                            <Label Text="工作区变更" FontSize="15" FontAttributes="Bold"
+                                   TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}" />
+                            <Label Text="{Binding ChangeSummary}" FontSize="11"
+                                   TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" />
+                        </VerticalStackLayout>
+                        <Label Grid.Column="1" Text="✕" FontSize="15" VerticalOptions="Center"
+                               TextColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}">
+                            <Label.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnSheetBackdropTapped" />
+                            </Label.GestureRecognizers>
+                        </Label>
+                    </Grid>
+
+                    <CollectionView Grid.Row="1" ItemsSource="{Binding Changes}">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="models:FileItem">
+                                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" Padding="0,7">
+                                    <CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                              CheckedChanged="OnChangeChecked"
+                                              Color="{AppThemeBinding Light=#5B4BE0, Dark=#7C5CFF}"
+                                              VerticalOptions="Center" />
+
+                                    <VerticalStackLayout Grid.Column="1" Spacing="1" VerticalOptions="Center">
+                                        <Label Text="{Binding Name}" FontSize="13"
+                                               LineBreakMode="MiddleTruncation"
+                                               TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}" />
+                                        <Label Text="{Binding FolderLabel}" FontSize="10"
+                                               LineBreakMode="TailTruncation"
+                                               TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" />
+                                    </VerticalStackLayout>
+
+                                    <Border Grid.Column="2"
+                                            IsVisible="{Binding HasChanges}"
+                                            Padding="7,2"
+                                            StrokeThickness="0"
+                                            VerticalOptions="Center"
+                                            BackgroundColor="{Binding GitStatus, Converter={StaticResource StatusColor}, ConverterParameter=bg}">
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="6" />
+                                        </Border.StrokeShape>
+                                        <Label Text="{Binding StatusLetter}"
+                                               FontSize="10"
+                                               FontAttributes="Bold"
+                                               TextColor="{Binding GitStatus, Converter={StaticResource StatusColor}, ConverterParameter=fg}" />
+                                    </Border>
+                                </Grid>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+
+                        <CollectionView.EmptyView>
+                            <Label Text="工作区干净" FontSize="13" HorizontalOptions="Center" Margin="0,30"
+                                   TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" />
+                        </CollectionView.EmptyView>
+                    </CollectionView>
+
+                    <Border Grid.Row="2"
+                            BackgroundColor="{AppThemeBinding Light=#EFF1F7, Dark=#0B0E16}"
+                            Stroke="{AppThemeBinding Light=#DCE1EC, Dark=#1E2434}"
+                            StrokeThickness="1"
+                            Padding="12,0">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="12" />
+                        </Border.StrokeShape>
+                        <Entry x:Name="CommitEntry"
+                               Placeholder="Commit message"
+                               PlaceholderColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}"
+                               TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}"
+                               BackgroundColor="Transparent"
+                               FontSize="14"
+                               HeightRequest="42"
+                               ReturnType="Done"
+                               Completed="OnCommitClicked" />
+                    </Border>
+
+                    <Button Grid.Row="3"
+                            x:Name="CommitButton"
+                            Text="Commit &amp; Push"
+                            Clicked="OnCommitClicked"
+                            HeightRequest="46"
+                            CornerRadius="14"
+                            FontSize="14"
+                            FontAttributes="Bold"
+                            TextColor="#FFFFFF">
+                        <Button.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                <GradientStop Color="#7C5CFF" Offset="0.0" />
+                                <GradientStop Color="#3B82F6" Offset="1.0" />
+                            </LinearGradientBrush>
+                        </Button.Background>
+                    </Button>
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</ContentPage>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:conv="clr-namespace:Pebble.Converters"
+             x:Class="Pebble.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- 双主题色值直接写在各属性的 AppThemeBinding 里。
+                 不要用 OnAppTheme 资源再 StaticResource 引用：Border.Stroke / Path.Stroke 是 Brush 类型，
+                 OnAppTheme<Color> 混用会在 XAML 解析期直接崩溃，且 WinUI 不打任何日志。 -->
+            <conv:GitStatusColorConverter x:Key="StatusColor" />
+
+            <!-- 多选上下文栏的操作按钮 -->
+            <Style x:Key="CtxButton" TargetType="Button">
+                <Setter Property="HeightRequest" Value="34" />
+                <Setter Property="CornerRadius" Value="9" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="BorderWidth" Value="1" />
+                <Setter Property="TextColor" Value="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}" />
+                <Setter Property="BackgroundColor" Value="{AppThemeBinding Light=#FFFFFF, Dark=#161A26}" />
+                <Setter Property="BorderColor" Value="{AppThemeBinding Light=#DCE1EC, Dark=#232838}" />
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
