@@ -160,16 +160,26 @@ public static class FileOperations
     /// <summary>文件返回字节数，目录递归求和。</summary>
     public static long SizeOf(string path)
     {
-        if (File.Exists(path)) return new FileInfo(path).Length;
-        if (!Directory.Exists(path)) return 0;
-
-        long total = 0;
-        foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+        try
         {
-            try { total += new FileInfo(file).Length; }
-            catch (IOException) { /* 单个文件读不到不影响整体统计 */ }
+            if (File.Exists(path)) return new FileInfo(path).Length;
+            if (!Directory.Exists(path)) return 0;
+
+            long total = 0;
+            foreach (var file in Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories))
+            {
+                try { total += new FileInfo(file).Length; }
+                catch (IOException) { /* 单个文件读不到不影响整体统计 */ }
+            }
+
+            return total;
         }
-        return total;
+        catch (Exception)
+        {
+            // 外部存储里 Android/data 等目录会抛 UnauthorizedAccessException，
+            // 这里返回 0 让界面显示"未知"，而不是把异常抛回 UI 线程导致闪退
+            return 0;
+        }
     }
 
     public static string FormatSize(long bytes) => bytes switch

@@ -8,7 +8,7 @@ namespace Pebble;
 
 public partial class EditorPage : ContentPage
 {
-    private const long TruncateThreshold = 5L * 1024 * 1024;    // 5 MB：只读前 5000 行
+    private const long TruncateThreshold = 2L * 1024 * 1024;    // 2 MB：只读前 5000 行
     private const long ConfirmThreshold = 50L * 1024 * 1024;    // 50 MB：先问用户
     private const int MaxLines = 5000;
 
@@ -87,6 +87,16 @@ public partial class EditorPage : ContentPage
             _truncated = size > TruncateThreshold;
             _content = _truncated ? ReadHead(_item.FullPath, MaxLines) : File.ReadAllText(_item.FullPath);
 
+            // 扩展名说它是文本，内容却含 NUL —— 多半是二进制被误分类。
+            // 直接按文本读会得到一个体积翻倍的字符串，再塞进 WebView 基本必 OOM。
+            if (!_truncated && LooksBinary(_content))
+            {
+                await this.SafeAlertAsync("无法预览",
+                    "这个文件虽然扩展名是文本类型，但内容包含二进制数据。", "好");
+                await Navigation.PopAsync();
+                return;
+            }
+
             if (_truncated)
             {
                 ReadOnlyBadge.IsVisible = true;
@@ -122,6 +132,16 @@ public partial class EditorPage : ContentPage
         var lines = 1;
         foreach (var c in text) if (c == '\n') lines++;
         return lines;
+    }
+
+    /// <summary>前 8KB 里出现 NUL 就认为是二进制。文本文件几乎不会有这个字节。</summary>
+    private static bool LooksBinary(string text)
+    {
+        var limit = Math.Min(text.Length, 8192);
+        for (var i = 0; i < limit; i++)
+            if (text[i] == '\0') return true;
+
+        return false;
     }
 
     private void RenderEditor()

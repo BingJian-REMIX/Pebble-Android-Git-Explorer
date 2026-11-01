@@ -10,6 +10,10 @@ public partial class ImagePreviewPage : ContentPage
     private double _panStartX;
     private double _panStartY;
 
+    /// <summary>解码一张 4000x3000 的照片要约 48MB 堆内存，Android 默认堆扛不住。
+    /// 超过这个大小直接劝退，让用户用系统相册看。</summary>
+    private const long MaxBytes = 25L * 1024 * 1024;
+
     public ImagePreviewPage(FileItem item)
     {
         InitializeComponent();
@@ -27,6 +31,16 @@ public partial class ImagePreviewPage : ContentPage
         {
             var size = FileOperations.SizeOf(_item.FullPath);
             MetaLabel.Text = $"{FileOperations.FormatSize(size)} · {_item.RelativePath}";
+
+            if (size > MaxBytes)
+            {
+                MetaLabel.Text = $"{FileOperations.FormatSize(size)} · 过大，已停止加载";
+                MainThread.BeginInvokeOnMainThread(async () =>
+                    await this.SafeAlertAsync("图片过大",
+                        $"这张图片 {FileOperations.FormatSize(size)}，直接解码会耗尽内存。建议用系统相册查看。", "好"));
+                return;
+            }
+
             Pic.Source = ImageSource.FromFile(_item.FullPath);
         }
         catch (Exception ex)

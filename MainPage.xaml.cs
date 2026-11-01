@@ -312,44 +312,63 @@ public partial class MainPage : ContentPage
         if (_suppressNextTap) { _suppressNextTap = false; return; }
         if (ItemOf(sender) is not FileItem item) return;
 
-        if (IsSelectionMode)
+        // async void 一旦漏异常就会直接杀进程（AppDomain 兜底只记日志不阻止退出），
+        // 所以整个分发链路都要兜住
+        try
         {
-            ToggleSelection(item);
-            return;
+            if (IsSelectionMode)
+            {
+                ToggleSelection(item);
+                return;
+            }
+
+            if (item.IsDirectory)
+            {
+                _relativePath = item.RelativePath;
+                await LoadAsync();
+                return;
+            }
+
+            // 按扩展名分流：代码进编辑器、图片进全屏预览、其余给体积提示
+            switch (FileKinds.Classify(item.FullPath))
+            {
+                case FileKind.Text:
+                    await OpenEditorAsync(item);
+                    break;
+
+                case FileKind.Image:
+                    await Navigation.PushAsync(new ImagePreviewPage(item));
+                    break;
+
+                default:
+                    await ShowBinaryInfoAsync(item);
+                    break;
+            }
         }
-
-        if (item.IsDirectory)
+        catch (Exception ex)
         {
-            _relativePath = item.RelativePath;
-            await LoadAsync();
-            return;
-        }
-
-        // 按扩展名分流：代码进编辑器、图片进全屏预览、其余给体积提示
-        switch (FileKinds.Classify(item.FullPath))
-        {
-            case FileKind.Text:
-                await OpenEditorAsync(item);
-                break;
-
-            case FileKind.Image:
-                await Navigation.PushAsync(new ImagePreviewPage(item));
-                break;
-
-            default:
-                await ShowBinaryInfoAsync(item);
-                break;
+            AppLog.Error("item-tap", ex);
+            await this.SafeAlertAsync("打开失败", ex.Message, "好");
         }
     }
 
     private async Task ShowBinaryInfoAsync(FileItem item)
     {
-        var size = await Task.Run(() => FileOperations.SizeOf(item.FullPath));
+        try
+        {
+            var size = await Task.Run(() => FileOperations.SizeOf(item.FullPath));
 
-        await this.SafeAlertAsync(item.Name,
-            $"路径：{item.RelativePath}\n" +
-            $"大小：{FileOperations.FormatSize(size)}\n\n" +
-            "暂不支持直接预览。", "好");
+            await this.SafeAlertAsync(item.Name,
+                $"路径：{item.RelativePath}\n" +
+                $"大小：{FileOperations.FormatSize(size)}\n\n" +
+                "暂不支持直接预览。", "好");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("binary-info", ex);
+            await this.SafeAlertAsync(item.Name,
+                $"路径：{item.RelativePath}\n\n无法读取该文件的信息。", "好");
+        }
     }
 
     private void OnItemPressed(object? sender, PointerEventArgs e)
