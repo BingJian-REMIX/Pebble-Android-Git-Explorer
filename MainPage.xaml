@@ -48,6 +48,23 @@
                     <Label Text="{Binding BranchName}" FontSize="12"
                            TextColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" VerticalOptions="Center" />
 
+                    <!-- 浏览位置：演示仓库 / 手机存储 -->
+                    <Border WidthRequest="30" HeightRequest="30"
+                            BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#10131C}"
+                            Stroke="{AppThemeBinding Light=#DCE1EC, Dark=#1E2434}"
+                            StrokeThickness="1">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="9" />
+                        </Border.StrokeShape>
+                        <Label Text="▤" FontSize="14" FontAttributes="Bold"
+                               TextColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}"
+                               HorizontalOptions="Center" VerticalOptions="Center">
+                            <Label.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnSwitchRootTapped" />
+                            </Label.GestureRecognizers>
+                        </Label>
+                    </Border>
+
                     <!-- 本地静态服务器开关 -->
                     <Border WidthRequest="30" HeightRequest="30"
                             BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#10131C}"
@@ -203,8 +220,8 @@
                                      HorizontalOptions="End" VerticalOptions="End"
                                      Margin="{Binding FabMargin}" Spacing="14">
 
-                    <!-- Git 抽屉 FAB + 变更数角标 -->
-                    <Grid WidthRequest="56" HeightRequest="56">
+                    <!-- Git 抽屉 FAB + 变更数角标（非 Git 目录下整个隐藏） -->
+                    <Grid WidthRequest="56" HeightRequest="56" IsVisible="{Binding IsGitRepo}">
                         <Border x:Name="GitFab" StrokeThickness="0">
                             <Border.StrokeShape>
                                 <Ellipse />

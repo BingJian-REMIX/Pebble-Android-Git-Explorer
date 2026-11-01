@@ -8,7 +8,14 @@ namespace Pebble;
 public partial class MainPage : ContentPage
 {
     private readonly GitService _git = new();
-    private string _repoRoot = string.Empty;
+
+    /// <summary>当前浏览根：可能是 App 沙盒里的 Git 仓库，也可能是手机存储。</summary>
+    private string _root = string.Empty;
+    private bool _isGitRepo;
+
+    /// <summary>点了「打开手机存储」但用户还没去设置页授权，返回时要自动接上。</summary>
+    private bool _pendingPhoneStorage;
+
     private string _relativePath = string.Empty; // 永远是 '/' 分隔，根目录为空串
 
     // 应用内剪贴板：跨目录粘贴，不碰系统剪贴板
@@ -89,6 +96,23 @@ public partial class MainPage : ContentPage
 
     public bool IsBrowseMode => !_isSelectionMode;
 
+    /// <summary>当前根是不是 Git 仓库。非仓库时 Git 抽屉、徽章、提交入口全部停用。</summary>
+    public bool IsGitRepo
+    {
+        get => _isGitRepo;
+        private set
+        {
+            if (_isGitRepo == value) return;
+            _isGitRepo = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>顶栏根目录显示名。</summary>
+    public string RootLabel => _root == StorageAccess.ExternalRoot
+        ? "手机存储"
+        : string.IsNullOrEmpty(_root) ? "/" : Path.GetFileName(_root.TrimEnd('/'));
+
     /// <summary>FAB 会压住底部粘贴条，剪贴板有内容时整体上移让位（而不是隐藏，否则提交入口就没了）。</summary>
     public Thickness FabMargin => _clipboard.Count == 0
         ? new Thickness(0, 0, 18, 18)
@@ -137,7 +161,22 @@ public partial class MainPage : ContentPage
     protected override async void OnAppearing()
     {
         base.OnAppearing();
-        if (_repoRoot.Length > 0) return;
+
+        // 从系统「所有文件访问权限」设置页返回时：拿到权限就自动切过去，
+        // 不用用户再点一次按钮。
+        if (_pendingPhoneStorage)
+        {
+            if (StorageAccess.HasAllFilesAccess())
+            {
+                _pendingPhoneStorage = false;
+                SwitchRoot(StorageAccess.ExternalRoot);
+                return;
+            }
+
+            _pendingPhoneStorage = false;
+        }
+
+        if (_root.Length > 0) return;
 
         IsLoading = true;
         try
@@ -150,13 +189,10 @@ public partial class MainPage : ContentPage
                     "放在 Platforms/Android/libs/<abi>/ 或随平台包提供（详见 README）。", "好");
             }
 
-            // 注意：这里不能申请存储权限。App 只用私有目录，而 Android 11+ 的
-            // 「所有文件访问」会跳系统设置页，返回后再次触发 OnAppearing → 反复闪跳。
-            // 将来要浏览外部目录时，在打开目录的那一刻再调 StoragePermission.EnsureAsync()。
             await TlsBootstrap.EnsureCaBundleAsync();
 
-            _repoRoot = await TestRepoFactory.EnsureAsync();
-            BranchName = GitService.GetBranchName(_repoRoot);
+            _root = await TestRepoFactory.EnsureAsync();
+            BranchName = GitService.GetBranchName(_root);
 
             await LoadAsync();
         }
@@ -170,15 +206,34 @@ public partial class MainPage : ContentPage
         }
     }
 
+    /// <summary>切换浏览根（Git 仓库 / 手机存储），并重置到该根的顶层。</summary>
+    private void SwitchRoot(string root)
+    {
+        _root = root;
+        _relativePath = string.Empty;
+        IsGitRepo = GitService.IsRepository(root);
+
+        BranchName = IsGitRepo
+            ? GitService.GetBranchName(root)
+            : "外部目录";
+
+        OnPropertyChanged(nameof(RootLabel));
+        OnPropertyChanged(nameof(ServerColor));
+        _ = LoadAsync();
+    }
+
     // ---------------------------------------------------------------- 数据加载
 
     private async Task LoadAsync()
     {
-        if (_repoRoot.Length == 0) return;
+        if (_root.Length == 0) return;
 
         try
         {
-            var items = await _git.GetChildrenAsync(_repoRoot, _relativePath);
+            // 仓库根按 Git 视角列（带 M/U/D）；其他路径只按纯文件系统列
+            var items = IsGitRepo
+                ? await _git.GetChildrenAsync(_root, _relativePath)
+                : await FileOperations.ListAsync(_root, _relativePath);
 
             // 只有真正换目录/刷新时才播放入场动画；
             // 滚动复用触发的 Loaded 会在窗口期内被 _animateItems 挡掉，避免来回闪。
@@ -187,13 +242,14 @@ public partial class MainPage : ContentPage
             Items.Clear();
             foreach (var item in items) Items.Add(item);
 
-            CurrentPath = _relativePath.Length == 0 ? "/" : "/" + _relativePath;
+            CurrentPath = _relativePath.Length == 0 ? RootLabel : "/" + _relativePath;
             OnPropertyChanged(nameof(SelectionSummary));
 
             _ = Task.Delay(1200).ContinueWith(_ =>
                 MainThread.BeginInvokeOnMainThread(() => _animateItems = false));
             // 角标只影响一个数字，别让它拖慢目录切换：列表先出来，变更数稍后补上。
-            _ = RefreshChangeCountAsync();
+            if (IsGitRepo) _ = RefreshChangeCountAsync();
+            else ChangeCount = 0;
         }
         catch (Exception ex)
         {
@@ -237,7 +293,7 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            var changes = await _git.GetWorkingChangesAsync(_repoRoot);
+            var changes = await _git.GetWorkingChangesAsync(_root);
             ChangeCount = changes.Count;
         }
         catch (Exception ex)
@@ -298,8 +354,16 @@ public partial class MainPage : ContentPage
 
     private void OnItemPressed(object? sender, PointerEventArgs e)
     {
-        if (IsSelectionMode) return;
         if (ItemOf(sender) is not FileItem item) return;
+        if (IsSelectionMode) return;
+
+        // 目录长按不进多选，直接给操作菜单（新建子文件夹 / 重命名 / 删除）；
+        // 文件长按才是多选，避免两种手势互相打架。
+        if (item.IsDirectory)
+        {
+            Dispatcher.Dispatch(() => _ = ShowDirectoryMenuAsync(item));
+            return;
+        }
 
         _pressTimer?.Stop();
         _pressTimer = Dispatcher.CreateTimer();
@@ -311,6 +375,31 @@ public partial class MainPage : ContentPage
             EnterSelection(item);
         };
         _pressTimer.Start();
+    }
+
+    private async Task ShowDirectoryMenuAsync(FileItem item)
+    {
+        var action = await DisplayActionSheetAsync(item.Name, "取消", null,
+            "新建子文件夹", "重命名", "删除", "选择项目");
+
+        switch (action)
+        {
+            case "新建子文件夹":
+                await CreateFolderAsync(item.RelativePath);
+                break;
+
+            case "重命名":
+                await RenameItemAsync(item);
+                break;
+
+            case "删除":
+                await DeleteItemsAsync(new[] { item });
+                break;
+
+            case "选择项目":
+                EnterSelection(item);
+                break;
+        }
     }
 
     private void OnItemReleased(object? sender, PointerEventArgs e) => _pressTimer?.Stop();
@@ -362,7 +451,7 @@ public partial class MainPage : ContentPage
         {
             try
             {
-                var url = server.Start(_repoRoot);
+                var url = server.Start(_root);
                 OnPropertyChanged(nameof(ServerColor));
 
                 await this.SafeAlertAsync("服务已启动",
@@ -478,7 +567,7 @@ public partial class MainPage : ContentPage
         var selected = SelectedItems;
         if (selected.Count == 0) return;
 
-        var targetDirectory = RepoPath.Combine(_repoRoot, _relativePath);
+        var targetDirectory = RepoPath.Combine(_root, _relativePath);
 
         try
         {
@@ -498,7 +587,7 @@ public partial class MainPage : ContentPage
     {
         if (_clipboard.Count == 0) return;
 
-        var targetDirectory = RepoPath.Combine(_repoRoot, _relativePath);
+        var targetDirectory = RepoPath.Combine(_root, _relativePath);
         var isCut = _clipboardIsCut;
 
         try
@@ -569,18 +658,29 @@ public partial class MainPage : ContentPage
 
     private async void OnNewFabTapped(object? sender, TappedEventArgs e)
     {
+        var action = await DisplayActionSheetAsync("新建", "取消", null, "文件", "文件夹");
+
+        if (action == "文件") await CreateFileAsync();
+        else if (action == "文件夹") await CreateFolderAsync();
+    }
+
+    private async Task CreateFileAsync()
+    {
         var name = await DisplayPromptAsync("新建文件", "文件名，可用 src/a.cs 建子目录", "创建", "取消", "untitled.txt");
         if (string.IsNullOrWhiteSpace(name)) return;
 
         try
         {
-            var directory = RepoPath.Combine(_repoRoot, _relativePath);
-            var full = Path.Combine(directory, name.Trim().Replace('\\', '/'));
+            await Task.Run(() =>
+            {
+                var directory = RepoPath.Combine(_root, _relativePath);
+                var full = Path.Combine(directory, name.Trim().Replace('\\', '/'));
 
-            var parent = Path.GetDirectoryName(full);
-            if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
+                var parent = Path.GetDirectoryName(full);
+                if (!string.IsNullOrEmpty(parent)) Directory.CreateDirectory(parent);
 
-            if (!File.Exists(full)) File.WriteAllText(full, string.Empty);
+                if (!File.Exists(full)) File.WriteAllText(full, string.Empty);
+            });
         }
         catch (Exception ex)
         {
@@ -588,6 +688,108 @@ public partial class MainPage : ContentPage
         }
 
         await LoadAsync();
+    }
+
+    private async Task CreateFolderAsync() => await CreateFolderAsync(_relativePath);
+
+    private async Task CreateFolderAsync(string insideRelativePath)
+    {
+        var name = await DisplayPromptAsync("新建文件夹", "文件夹名称", "创建", "取消", "新建文件夹");
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        try
+        {
+            await Task.Run(() => FileOperations.CreateDirectory(_root, insideRelativePath, name));
+        }
+        catch (Exception ex)
+        {
+            await this.SafeAlertAsync("创建失败", ex.Message, "好");
+        }
+
+        await LoadAsync();
+    }
+
+    /// <summary>长按目录菜单用的单个重命名。</summary>
+    private async Task RenameItemAsync(FileItem item)
+    {
+        var newName = await DisplayPromptAsync("重命名", "新名称", "确定", "取消", item.Name);
+        if (string.IsNullOrWhiteSpace(newName) || newName.Trim() == item.Name) return;
+
+        try
+        {
+            await Task.Run(() => FileOperations.Rename(item.FullPath, newName.Trim()));
+        }
+        catch (Exception ex)
+        {
+            await this.SafeAlertAsync("重命名失败", ex.Message, "好");
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task DeleteItemsAsync(IReadOnlyCollection<FileItem> items)
+    {
+        if (items.Count == 0) return;
+
+        var confirmed = await this.SafeConfirmAsync("删除",
+            $"确定删除 {items.Count} 项？该操作不可撤销。", "删除", "取消");
+        if (!confirmed) return;
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                foreach (var item in items) FileOperations.Delete(item.FullPath);
+            });
+        }
+        catch (Exception ex)
+        {
+            await this.SafeAlertAsync("删除失败", ex.Message, "好");
+        }
+
+        await LoadAsync();
+    }
+
+    // ------------------------------------------------------------ 浏览位置
+
+    private async void OnPhoneStorageTapped(object? sender, TappedEventArgs e)
+    {
+        if (!StorageAccess.HasAllFilesAccess())
+        {
+            var go = await this.SafeConfirmAsync("需要「所有文件访问」权限",
+                "浏览手机文件需要该权限。\n\n接下来会打开系统设置页，请在列表里找到 Pebble 并允许。",
+                "去授权", "取消");
+            if (!go) return;
+
+            // 记住意图：用户从设置页返回时 OnAppearing 会自动接上
+            _pendingPhoneStorage = true;
+            StorageAccess.RequestAllFilesAccess();
+            return;
+        }
+
+        if (!StorageAccess.ExternalRootExists())
+        {
+            await this.SafeAlertAsync("找不到手机存储", $"目录不存在：{StorageAccess.ExternalRoot}", "好");
+            return;
+        }
+
+        SwitchRoot(StorageAccess.ExternalRoot);
+    }
+
+    private async void OnSwitchRootTapped(object? sender, TappedEventArgs e)
+    {
+        var action = await DisplayActionSheetAsync("浏览位置", "取消", null,
+            _root == StorageAccess.ExternalRoot ? "返回演示仓库" : "打开手机存储");
+
+        if (action == "打开手机存储")
+        {
+            OnPhoneStorageTapped(sender, e);
+        }
+        else if (action == "返回演示仓库")
+        {
+            var repo = await TestRepoFactory.EnsureAsync();
+            SwitchRoot(repo);
+        }
     }
 
     // ---------------------------------------------------------------- Git 抽屉
@@ -639,7 +841,7 @@ public partial class MainPage : ContentPage
     {
         try
         {
-            var changes = await _git.GetWorkingChangesAsync(_repoRoot);
+            var changes = await _git.GetWorkingChangesAsync(_root);
 
             // 批量填充时别把每一行都当成用户手动勾选去 stage
             _suppressStage = true;
@@ -663,7 +865,7 @@ public partial class MainPage : ContentPage
     private void OnChangeChecked(object? sender, CheckedChangedEventArgs e)
     {
         if (_suppressStage) return;
-        if (ItemOf(sender) is not FileItem item || _repoRoot.Length == 0) return;
+        if (ItemOf(sender) is not FileItem item || _root.Length == 0) return;
 
         var stage = e.Value;
         var relativePath = item.RelativePath;
@@ -672,8 +874,8 @@ public partial class MainPage : ContentPage
         {
             try
             {
-                if (stage) _git.StageFile(_repoRoot, relativePath);
-                else _git.UnstageFile(_repoRoot, relativePath);
+                if (stage) _git.StageFile(_root, relativePath);
+                else _git.UnstageFile(_root, relativePath);
             }
             catch (Exception)
             {
@@ -703,14 +905,14 @@ public partial class MainPage : ContentPage
 
         try
         {
-            var result = await Task.Run(() => _git.CommitPaths(_repoRoot, message, selected));
+            var result = await Task.Run(() => _git.CommitPaths(_root, message, selected));
 
             await this.SafeAlertAsync(result.Success ? "完成" : "未完成", result.Message, "好");
 
             if (result.Success)
             {
                 CommitEntry.Text = string.Empty;
-                BranchName = GitService.GetBranchName(_repoRoot);
+                BranchName = GitService.GetBranchName(_root);
                 await CloseSheetAsync();
             }
 

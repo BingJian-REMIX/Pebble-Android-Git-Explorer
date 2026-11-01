@@ -1,10 +1,89 @@
 using System.IO.Compression;
+using Pebble.Models;
 
 namespace Pebble.Services;
 
 /// <summary>纯文件系统操作：复制 / 移动 / 删除 / 重命名 / 压缩。全部基于 System.IO，不依赖平台 API。</summary>
 public static class FileOperations
 {
+    /// <summary>
+    /// 列目录，不查 Git 状态，供浏览手机任意目录用。
+    /// Android 上 Android/data、Android/obb 即使有全盘权限也读不了，
+    /// 所以逐项 try，读不了的目录直接跳过而不是让整个列表失败。
+    /// </summary>
+    public static async Task<IReadOnlyList<FileItem>> ListAsync(string root, string relativePath)
+    {
+        return await Task.Run(() =>
+        {
+            var directory = string.IsNullOrEmpty(relativePath)
+                ? root
+                : Path.Combine(root, relativePath.Replace('/', Path.DirectorySeparatorChar));
+
+            var list = new List<FileItem>();
+
+            foreach (var path in SafeEnumerate(Directory.EnumerateDirectories(directory)))
+            {
+                list.Add(new FileItem
+                {
+                    Name = Path.GetFileName(path),
+                    FullPath = path,
+                    IsDirectory = true,
+                    RelativePath = ToRelative(root, path)
+                });
+            }
+
+            foreach (var path in SafeEnumerate(Directory.EnumerateFiles(directory)))
+            {
+                list.Add(new FileItem
+                {
+                    Name = Path.GetFileName(path),
+                    FullPath = path,
+                    IsDirectory = false,
+                    RelativePath = ToRelative(root, path)
+                });
+            }
+
+            return (IReadOnlyList<FileItem>)list
+                .OrderBy(i => !i.IsDirectory)
+                .ThenBy(i => i.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        });
+    }
+
+    /// <summary>在 root/relativeDirectory 下建文件夹，同名则自动追加序号。</summary>
+    public static string CreateDirectory(string root, string relativeDirectory, string name)
+    {
+        var target = Path.Combine(root, relativeDirectory, name.Trim());
+        if (Directory.Exists(target) || File.Exists(target)) target = UniquePath(target);
+
+        Directory.CreateDirectory(target);
+        return target;
+    }
+
+    private static IEnumerable<string> SafeEnumerate(IEnumerable<string> source)
+    {
+        using var iterator = source.GetEnumerator();
+
+        while (true)
+        {
+            bool moved;
+            try
+            {
+                moved = iterator.MoveNext();
+            }
+            catch (Exception)
+            {
+                yield break;   // 无权限的子目录，跳过即可
+            }
+
+            if (!moved) yield break;
+            yield return iterator.Current;
+        }
+    }
+
+    private static string ToRelative(string root, string full)
+        => Path.GetRelativePath(root, full).Replace(Path.DirectorySeparatorChar, '/');
+
     public static string CopyTo(string sourcePath, string targetDirectory)
     {
         var target = UniquePath(Path.Combine(targetDirectory, Path.GetFileName(sourcePath)));
