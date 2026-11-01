@@ -47,7 +47,9 @@
 		     前景给 1x1 透明占位，这样 Android 自适应图标直接用整张图，
 		     不会被 Resizetizer 二次缩到 66% 而变小。 -->
 		<MauiIcon Include="Resources\AppIcon\appicon.png" ForegroundFile="Resources\AppIcon\appiconfg.png" Color="#07090F" />
-		<MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#07090F" BaseSize="128,128" />
+		<!-- 启动图：橙色 Logo 居中，深空黑底。BaseSize 给大一些，
+		     否则 Android 12+ 的 SplashScreen API 会把它缩得很小。 -->
+		<MauiSplashScreen Include="Resources\Splash\splash.png" Color="#07090F" BaseSize="512,512" />
 		<MauiFont Include="Resources\Fonts\*" />
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 	</ItemGroup>

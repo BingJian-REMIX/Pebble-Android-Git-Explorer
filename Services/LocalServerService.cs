@@ -299,21 +299,30 @@ public sealed class LocalServerService : IDisposable
         return builder.ToString();
     }
 
-    /// <summary>取手机在局域网里的 IPv4（跳过 127.x 与 169.254.x）。</summary>
+    /// <summary>取局域网 IPv4。Android 的 wlan 接口类型常报成 Unknown/Ethernet，
+    /// 所以不能按类型筛，只排除回环、链路本地和隧道接口。</summary>
     public static string? GetLanIp()
     {
         try
         {
-            return NetworkInterface.GetAllNetworkInterfaces()
+            var candidates = NetworkInterface.GetAllNetworkInterfaces()
                 .Where(n => n.OperationalStatus == OperationalStatus.Up)
-                .Where(n => n.NetworkInterfaceType is NetworkInterfaceType.Wireless80211
-                                                 or NetworkInterfaceType.Ethernet)
+                .Where(n => n.NetworkInterfaceType != NetworkInterfaceType.Loopback)
+                .Where(n => !n.Name.StartsWith("tun", StringComparison.OrdinalIgnoreCase))
+                .Where(n => !n.Name.StartsWith("virbr", StringComparison.OrdinalIgnoreCase))
+                .Where(n => !n.Name.StartsWith("rmnet", StringComparison.OrdinalIgnoreCase))   // 蜂窝数据
                 .SelectMany(n => n.GetIPProperties().UnicastAddresses)
                 .Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork)
                 .Select(a => a.Address.ToString())
                 .Where(ip => !ip.StartsWith("127.", StringComparison.Ordinal))
                 .Where(ip => !ip.StartsWith("169.254.", StringComparison.Ordinal))
-                .FirstOrDefault();
+                .ToList();
+
+            // 优先常见家用网段，避免选到 Docker/虚拟网卡
+            return candidates.FirstOrDefault(ip => ip.StartsWith("192.168.", StringComparison.Ordinal))
+                ?? candidates.FirstOrDefault(ip => ip.StartsWith("10.", StringComparison.Ordinal))
+                ?? candidates.FirstOrDefault(ip => ip.StartsWith("172.", StringComparison.Ordinal))
+                ?? candidates.FirstOrDefault();
         }
         catch (Exception ex)
         {
