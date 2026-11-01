@@ -50,6 +50,13 @@ public partial class MainPage : ContentPage
         private set => SetField(ref _branchName, value);
     }
 
+    /// <summary>本地服务指示点：运行中为绿色，未启动跟随主题次要色。</summary>
+    public Color ServerColor => LocalServerService.Shared.IsRunning
+        ? Color.FromArgb("#22C55E")
+        : Application.Current?.RequestedTheme == AppTheme.Dark
+            ? Color.FromArgb("#4C5468")
+            : Color.FromArgb("#9AA1B2");
+
     private bool _isLoading;
     public bool IsLoading
     {
@@ -262,10 +269,31 @@ public partial class MainPage : ContentPage
             return;
         }
 
-        var action = await DisplayActionSheetAsync(item.Name, "取消", null, "用编辑器打开", "查看属性");
+        // 按扩展名分流：代码进编辑器、图片进全屏预览、其余给体积提示
+        switch (FileKinds.Classify(item.FullPath))
+        {
+            case FileKind.Text:
+                await OpenEditorAsync(item);
+                break;
 
-        if (action == "用编辑器打开") await OpenEditorAsync(item);
-        else if (action == "查看属性") await ShowPropertiesAsync(item);
+            case FileKind.Image:
+                await Navigation.PushAsync(new ImagePreviewPage(item));
+                break;
+
+            default:
+                await ShowBinaryInfoAsync(item);
+                break;
+        }
+    }
+
+    private async Task ShowBinaryInfoAsync(FileItem item)
+    {
+        var size = await Task.Run(() => FileOperations.SizeOf(item.FullPath));
+
+        await this.SafeAlertAsync(item.Name,
+            $"路径：{item.RelativePath}\n" +
+            $"大小：{FileOperations.FormatSize(size)}\n\n" +
+            "暂不支持直接预览。", "好");
     }
 
     private void OnItemPressed(object? sender, PointerEventArgs e)
@@ -324,17 +352,51 @@ public partial class MainPage : ContentPage
         await Navigation.PushAsync(editor);
     }
 
-    private async Task ShowPropertiesAsync(FileItem item)
-    {
-        var size = await Task.Run(() => FileOperations.SizeOf(item.FullPath));
-        var modified = File.Exists(item.FullPath) ? File.GetLastWriteTime(item.FullPath) : DateTime.MinValue;
+    // ------------------------------------------------------------ 本地静态服务器
 
-        await this.SafeAlertAsync(item.Name,
-            $"路径：{item.RelativePath}\n" +
-            $"类型：{(item.IsDirectory ? "目录" : "文件")}\n" +
-            $"大小：{FileOperations.FormatSize(size)}\n" +
-            $"修改时间：{(modified == DateTime.MinValue ? "—" : modified.ToString("yyyy-MM-dd HH:mm"))}\n" +
-            $"Git：{item.GitStatus}", "关闭");
+    private async void OnServerTapped(object? sender, TappedEventArgs e)
+    {
+        var server = LocalServerService.Shared;
+
+        if (!server.IsRunning)
+        {
+            try
+            {
+                var url = server.Start(_repoRoot);
+                OnPropertyChanged(nameof(ServerColor));
+
+                await this.SafeAlertAsync("服务已启动",
+                    $"电脑浏览器访问：\n{url}\n\n" +
+                    $"根目录：{server.Root}\n\n" +
+                    "再点一次 ⇄ 可以停止服务。", "好");
+            }
+            catch (Exception ex)
+            {
+                await this.SafeAlertAsync("启动失败", ex.Message, "好");
+            }
+            return;
+        }
+
+        var action = await DisplayActionSheetAsync("本地服务运行中", "取消", null,
+            "复制地址", "在浏览器打开", "停止服务");
+
+        switch (action)
+        {
+            case "复制地址":
+                await Clipboard.Default.SetTextAsync(server.Url);
+                await this.SafeAlertAsync("已复制", server.Url, "好");
+                break;
+
+            case "在浏览器打开":
+                try { await Browser.Default.OpenAsync(server.Url, BrowserLaunchMode.SystemPreferred); }
+                catch (Exception ex) { await this.SafeAlertAsync("打开失败", ex.Message, "好"); }
+                break;
+
+            case "停止服务":
+                server.Stop();
+                OnPropertyChanged(nameof(ServerColor));
+                break;
+        }
     }
 
     // ---------------------------------------------------------------- 批量操作

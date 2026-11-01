@@ -42,11 +42,28 @@
                            LineBreakMode="TailTruncation" />
                 </VerticalStackLayout>
 
-                <HorizontalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
+                <HorizontalStackLayout Grid.Column="2" Spacing="8" VerticalOptions="Center">
                     <BoxView WidthRequest="5" HeightRequest="5" CornerRadius="2.5"
                              Color="{AppThemeBinding Light=#5B4BE0, Dark=#7C5CFF}" VerticalOptions="Center" />
                     <Label Text="{Binding BranchName}" FontSize="12"
                            TextColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" VerticalOptions="Center" />
+
+                    <!-- 本地静态服务器开关 -->
+                    <Border WidthRequest="30" HeightRequest="30"
+                            BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#10131C}"
+                            Stroke="{AppThemeBinding Light=#DCE1EC, Dark=#1E2434}"
+                            StrokeThickness="1">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="9" />
+                        </Border.StrokeShape>
+                        <Label Text="⇄" FontSize="15" FontAttributes="Bold"
+                               TextColor="{Binding ServerColor}"
+                               HorizontalOptions="Center" VerticalOptions="Center">
+                            <Label.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnServerTapped" />
+                            </Label.GestureRecognizers>
+                        </Label>
+                    </Border>
                 </HorizontalStackLayout>
             </Grid>
 

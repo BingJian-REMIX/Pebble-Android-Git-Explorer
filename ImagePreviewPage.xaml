@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Pebble.ImagePreviewPage"
+             BackgroundColor="#000000">
+
+    <Grid>
+
+        <Image x:Name="Pic"
+               Aspect="AspectFit"
+               HorizontalOptions="Fill"
+               VerticalOptions="Fill">
+            <Image.GestureRecognizers>
+                <PinchGestureRecognizer PinchUpdated="OnPinchUpdated" />
+                <PanGestureRecognizer PanUpdated="OnPanUpdated" />
+                <TapGestureRecognizer Tapped="OnDoubleTapped" NumberOfTapsRequired="2" />
+            </Image.GestureRecognizers>
+        </Image>
+
+        <!-- 顶部信息条 -->
+        <Grid ColumnDefinitions="*,Auto"
+              VerticalOptions="Start"
+              Padding="{OnPlatform Default='16,14,16,8', Android='16,42,16,8'}"
+              ColumnSpacing="12"
+              BackgroundColor="#66000000">
+
+            <VerticalStackLayout Spacing="2">
+                <Label x:Name="NameLabel"
+                       FontSize="13"
+                       FontAttributes="Bold"
+                       TextColor="#FFFFFF"
+                       LineBreakMode="MiddleTruncation" />
+                <Label x:Name="MetaLabel"
+                       FontSize="11"
+                       TextColor="#B4B8C4" />
+            </VerticalStackLayout>
+
+            <Border Grid.Column="1"
+                    WidthRequest="32" HeightRequest="32"
+                    StrokeThickness="1"
+                    Stroke="#4C5468"
+                    BackgroundColor="#33161A26"
+                    VerticalOptions="Center">
+                <Border.StrokeShape>
+                    <Ellipse />
+                </Border.StrokeShape>
+                <Label Text="✕" FontSize="13" TextColor="#FFFFFF"
+                       HorizontalOptions="Center" VerticalOptions="Center">
+                    <Label.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnCloseTapped" />
+                    </Label.GestureRecognizers>
+                </Label>
+            </Border>
+        </Grid>
+
+        <Label Text="双击放大 · 双指缩放"
+               FontSize="10"
+               TextColor="#8B94A8"
+               HorizontalOptions="Center"
+               VerticalOptions="End"
+               Margin="0,0,0,24" />
+    </Grid>
+</ContentPage>

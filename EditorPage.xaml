@@ -4,20 +4,56 @@
              x:Class="Pebble.EditorPage"
              BackgroundColor="{AppThemeBinding Light=#F7F8FC, Dark=#07090F}">
 
-    <Grid RowDefinitions="*,Auto">
+    <!-- 操作栏不参与行布局，直接浮在底部：
+         Windows 上 WebView2 的高度测量会返回无限值，会把 Auto 行挤出可视区。 -->
+    <Grid>
 
-        <Editor x:Name="Body"
-                Grid.Row="0"
-                Margin="12,8"
-                FontSize="13"
-                FontFamily="{OnPlatform WinUI=Consolas, Android=monospace}"
-                TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}"
-                BackgroundColor="Transparent"
-                AutoSize="Disabled" />
+        <Grid RowDefinitions="Auto,*">
 
-        <Border Grid.Row="1"
-                Margin="12,4,12,14"
+            <!-- 顶部：文件名 + 体积 -->
+            <Grid Grid.Row="0"
+                  ColumnDefinitions="*,Auto"
+                  Padding="{OnPlatform Default='16,12,16,8', Android='16,40,16,8'}"
+                  ColumnSpacing="12">
+
+                <VerticalStackLayout Spacing="2">
+                    <Label x:Name="NameLabel"
+                           FontSize="14"
+                           FontAttributes="Bold"
+                           LineBreakMode="MiddleTruncation"
+                           TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}" />
+                    <Label x:Name="MetaLabel"
+                           FontSize="11"
+                           TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" />
+                </VerticalStackLayout>
+
+                <Border Grid.Column="1"
+                        IsVisible="False"
+                        x:Name="ReadOnlyBadge"
+                        Padding="8,3"
+                        StrokeThickness="0"
+                        VerticalOptions="Center"
+                        BackgroundColor="{AppThemeBinding Light=#FEF3C7, Dark=#3F2D0A}">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="7" />
+                    </Border.StrokeShape>
+                    <Label Text="只读" FontSize="10" FontAttributes="Bold"
+                           TextColor="{AppThemeBinding Light=#92400E, Dark=#FBBF24}" />
+                </Border>
+            </Grid>
+
+            <!-- 给底部操作栏留出空间 -->
+            <WebView Grid.Row="1"
+                     x:Name="View"
+                     Margin="0,0,0,86"
+                     BackgroundColor="{AppThemeBinding Light=#F7F8FC, Dark=#07090F}" />
+        </Grid>
+
+        <!-- 底部操作栏 -->
+        <Border VerticalOptions="End"
+                Margin="12,0,12,14"
                 Padding="10"
+                ZIndex="10"
                 BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#10131C}"
                 Stroke="{AppThemeBinding Light=#DCE1EC, Dark=#1E2434}"
                 StrokeThickness="1">
@@ -25,20 +61,46 @@
                 <RoundRectangle CornerRadius="18" />
             </Border.StrokeShape>
 
-            <Button Text="保存"
-                    Clicked="OnSaveClicked"
-                    HeightRequest="44"
-                    CornerRadius="12"
-                    FontSize="14"
-                    FontAttributes="Bold"
-                    TextColor="#FFFFFF">
-                <Button.Background>
-                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
-                        <GradientStop Color="#7C5CFF" Offset="0.0" />
-                        <GradientStop Color="#3B82F6" Offset="1.0" />
-                    </LinearGradientBrush>
-                </Button.Background>
-            </Button>
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+
+                <Button x:Name="ToggleButton"
+                        Grid.Column="0"
+                        IsVisible="False"
+                        Text="预览"
+                        Clicked="OnToggleClicked"
+                        HeightRequest="44"
+                        CornerRadius="12"
+                        Padding="16,0"
+                        FontSize="13"
+                        TextColor="{AppThemeBinding Light=#5B4BE0, Dark=#C4B5FD}"
+                        BackgroundColor="{AppThemeBinding Light=#EEF0FB, Dark=#1A1F33}"
+                        BorderWidth="0" />
+
+                <Label x:Name="StatusLabel"
+                       Grid.Column="1"
+                       FontSize="11"
+                       VerticalOptions="Center"
+                       LineBreakMode="TailTruncation"
+                       TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" />
+
+                <Button x:Name="SaveButton"
+                        Grid.Column="2"
+                        Text="保存"
+                        Clicked="OnSaveClicked"
+                        HeightRequest="44"
+                        CornerRadius="12"
+                        Padding="24,0"
+                        FontSize="14"
+                        FontAttributes="Bold"
+                        TextColor="#FFFFFF">
+                    <Button.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="#7C5CFF" Offset="0.0" />
+                            <GradientStop Color="#3B82F6" Offset="1.0" />
+                        </LinearGradientBrush>
+                    </Button.Background>
+                </Button>
+            </Grid>
         </Border>
     </Grid>
 </ContentPage>
