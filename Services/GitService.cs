@@ -171,6 +171,45 @@ public sealed class GitService
         Commands.Stage(repo, RepoPath.NormalizeRelative(relativePath));
     }
 
+    /// <summary>批量暂存。返回成功暂存的数量。</summary>
+    public Task<int> StageFilesAsync(string repoRoot, IReadOnlyList<string> relativePaths, CancellationToken ct = default)
+        => Task.Run(() =>
+        {
+            var root = RepoPath.NormalizeAbsolute(repoRoot);
+            using var repo = new Repository(root);
+
+            var staged = 0;
+            foreach (var rel in relativePaths)
+            {
+                Commands.Stage(repo, RepoPath.NormalizeRelative(rel));
+                staged++;
+            }
+
+            return staged;
+        }, ct);
+
+    /// <summary>
+    /// 获取工作区某个文件的 diff 文本（相对 HEAD）。
+    /// 用 repo.Diff.Compare&lt;Patch&gt;(null, DiffTargets.WorkingDirectory, pathspec) 拿 Patch 后拼 text。
+    /// 没有改动时返回 null。
+    /// </summary>
+    public Task<string?> GetFileDiffAsync(string repoRoot, string relativePath, CancellationToken ct = default)
+        => Task.Run(() => GetFileDiff(repoRoot, relativePath), ct);
+
+    public string? GetFileDiff(string repoRoot, string relativePath)
+    {
+        var root = RepoPath.NormalizeAbsolute(repoRoot);
+        using var repo = new Repository(root);
+
+        var rel = RepoPath.NormalizeRelative(relativePath);
+
+        var patch = repo.Diff.Compare<Patch>(null, DiffTargets.WorkingDirectory, new[] { rel });
+        if (patch is null) return null;
+
+        var text = patch.Content;
+        return string.IsNullOrWhiteSpace(text) ? null : text;
+    }
+
     public void UnstageFile(string repoRoot, string relativePath)
     {
         using var repo = new Repository(RepoPath.NormalizeAbsolute(repoRoot));
@@ -306,6 +345,35 @@ public sealed class GitService
         if (string.IsNullOrWhiteSpace(path)) return false;
         try { return Repository.IsValid(path); }
         catch { return false; }
+    }
+
+    /// <summary>
+    /// 从给定路径向上逐层查找 .git，返回仓库根；找不到返回 null。
+    /// 用于「在手机存储的某个子目录里也能识别出它属于某个 Git 仓库」。
+    /// </summary>
+    public static string? DiscoverRepository(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+
+        try
+        {
+            var current = Directory.Exists(path) ? path : Path.GetDirectoryName(path);
+            if (current is null) return null;
+
+            while (true)
+            {
+                if (IsRepository(current)) return current;
+
+                var parent = Path.GetDirectoryName(current);
+                if (parent is null || parent == current) return null;
+
+                current = parent;
+            }
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     public static string GetBranchName(string repoRoot)

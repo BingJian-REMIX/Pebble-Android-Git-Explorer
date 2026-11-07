@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using Pebble.Models;
 using Pebble.Services;
 
@@ -6,6 +7,7 @@ namespace Pebble;
 public partial class ImagePreviewPage : ContentPage
 {
     private readonly FileItem _item;
+    private readonly IReadOnlyList<FileItem> _all;
     private double _pinchStartScale = 1;
     private double _panStartX;
     private double _panStartY;
@@ -14,108 +16,141 @@ public partial class ImagePreviewPage : ContentPage
     /// 超过这个大小直接劝退，让用户用系统相册看。</summary>
     private const long MaxBytes = 25L * 1024 * 1024;
 
-    public ImagePreviewPage(FileItem item)
+    public ObservableCollection<FileItem> Photos { get; } = new();
+
+    public ImagePreviewPage(FileItem item, IReadOnlyList<FileItem>? siblings = null)
     {
         InitializeComponent();
 
         _item = item;
+        _all = siblings ?? new[] { item };
+
+        foreach (var f in _all) Photos.Add(f);
+
         Title = item.Name;
         NameLabel.Text = item.Name;
+
+        Carousel.ItemsSource = Photos;
+
+        // 定位到初始图片
+        var index = 0;
+        for (var i = 0; i < _all.Count; i++)
+        {
+            if (_all[i].FullPath == item.FullPath) { index = i; break; }
+        }
+        Carousel.Position = index;
     }
 
     protected override void OnAppearing()
     {
         base.OnAppearing();
+        UpdateMeta(_item);
+    }
 
+    private void UpdateMeta(FileItem item)
+    {
         try
         {
-            var size = FileOperations.SizeOf(_item.FullPath);
-            MetaLabel.Text = $"{FileOperations.FormatSize(size)} · {_item.RelativePath}";
-
-            if (size > MaxBytes)
-            {
-                MetaLabel.Text = $"{FileOperations.FormatSize(size)} · 过大，已停止加载";
-                MainThread.BeginInvokeOnMainThread(async () =>
-                    await this.SafeAlertAsync("图片过大",
-                        $"这张图片 {FileOperations.FormatSize(size)}，直接解码会耗尽内存。建议用系统相册查看。", "好"));
-                return;
-            }
-
-            Pic.Source = ImageSource.FromFile(_item.FullPath);
+            var size = FileOperations.SizeOf(item.FullPath);
+            NameLabel.Text = item.Name;
+            MetaLabel.Text = size > MaxBytes
+                ? $"{FileOperations.FormatSize(size)} · 过大"
+                : $"{FileOperations.FormatSize(size)} · {Photos.IndexOf(item) + 1}/{Photos.Count}";
         }
         catch (Exception ex)
         {
-            AppLog.Error("image", ex);
-            MetaLabel.Text = "无法加载图片";
+            AppLog.Error("image-meta", ex);
+            MetaLabel.Text = "无法读取文件信息";
+        }
+    }
+
+    private void OnPositionChanged(object? sender, PositionChangedEventArgs e)
+    {
+        if (e.CurrentPosition < 0 || e.CurrentPosition >= Photos.Count) return;
+
+        var current = Photos[e.CurrentPosition];
+        ResetTransform();
+
+        if (FileOperations.SizeOf(current.FullPath) > MaxBytes)
+        {
+            MainThread.BeginInvokeOnMainThread(async () =>
+                await this.SafeAlertAsync("图片过大",
+                    $"这张图片 {FileOperations.FormatSize(FileOperations.SizeOf(current.FullPath))}，直接解码会耗尽内存。建议用系统相册查看。", "好"));
         }
     }
 
     private void OnPinchUpdated(object? sender, PinchGestureUpdatedEventArgs e)
     {
+        if (sender is not Image img) return;
+
         switch (e.Status)
         {
             case GestureStatus.Started:
-                _pinchStartScale = Pic.Scale;
+                _pinchStartScale = img.Scale;
                 break;
-
             case GestureStatus.Running:
-                Pic.Scale = Math.Clamp(_pinchStartScale * e.Scale, 1, 8);
+                img.Scale = Math.Clamp(_pinchStartScale * e.Scale, 1, 8);
                 break;
-
             case GestureStatus.Completed:
             case GestureStatus.Canceled:
-                if (Pic.Scale <= 1.02) ResetTransform();
+                if (img.Scale <= 1.02) ResetTransform();
                 break;
         }
     }
 
     private void OnPanUpdated(object? sender, PanUpdatedEventArgs e)
     {
+        if (sender is not Image img) return;
+
         switch (e.StatusType)
         {
             case GestureStatus.Started:
-                _panStartX = Pic.TranslationX;
-                _panStartY = Pic.TranslationY;
+                _panStartX = img.TranslationX;
+                _panStartY = img.TranslationY;
                 break;
-
             case GestureStatus.Running:
-                if (Pic.Scale <= 1.02) return;   // 未放大时不做平移，避免图片被拖出屏幕
-                Pic.TranslationX = _panStartX + e.TotalX;
-                Pic.TranslationY = _panStartY + e.TotalY;
+                if (img.Scale <= 1.02) return;
+                img.TranslationX = _panStartX + e.TotalX;
+                img.TranslationY = _panStartY + e.TotalY;
                 break;
-
             case GestureStatus.Completed:
             case GestureStatus.Canceled:
-                ClampTranslation();
+                ClampTranslation(img);
                 break;
         }
     }
 
     private async void OnDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (Pic.Scale > 1.02)
+        if (sender is not Image img) return;
+
+        if (img.Scale > 1.02)
         {
             ResetTransform();
             return;
         }
 
-        await Pic.ScaleToAsync(2.5, 180, Easing.CubicOut);
+        await img.ScaleToAsync(2.5, 180, Easing.CubicOut);
     }
 
-    private void ClampTranslation()
+    private void ClampTranslation(Image img)
     {
-        var maxX = Math.Max(0, (Pic.Width * Pic.Scale - Width) / 2);
-        var maxY = Math.Max(0, (Pic.Height * Pic.Scale - Height) / 2);
+        var maxX = Math.Max(0, (img.Width * img.Scale - Width) / 2);
+        var maxY = Math.Max(0, (img.Height * img.Scale - Height) / 2);
 
-        Pic.TranslationX = Math.Clamp(Pic.TranslationX, -maxX, maxX);
-        Pic.TranslationY = Math.Clamp(Pic.TranslationY, -maxY, maxY);
+        img.TranslationX = Math.Clamp(img.TranslationX, -maxX, maxX);
+        img.TranslationY = Math.Clamp(img.TranslationY, -maxY, maxY);
     }
 
     private void ResetTransform()
     {
-        Pic.Scale = 1;
-        Pic.TranslationX = 0;
-        Pic.TranslationY = 0;
+        // 遍历 Carousel 视觉树里所有已实例化的 Image，全部复位缩放与位移
+        foreach (var img in Carousel.GetVisualTreeDescendants().OfType<Image>())
+        {
+            img.Scale = 1;
+            img.TranslationX = 0;
+            img.TranslationY = 0;
+        }
     }
 
     private async void OnCloseTapped(object? sender, TappedEventArgs e) => await Navigation.PopAsync();

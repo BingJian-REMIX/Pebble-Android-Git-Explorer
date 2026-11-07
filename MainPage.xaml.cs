@@ -1,5 +1,8 @@
 using System.Collections.ObjectModel;
+using System.IO.Compression;
 using System.Windows.Input;
+using Microsoft.Maui.ApplicationModel;
+using Microsoft.Maui.Storage;
 using Pebble.Models;
 using Pebble.Services;
 
@@ -28,6 +31,9 @@ public partial class MainPage : ContentPage
     private IDispatcherTimer? _pressTimer;
     private bool _suppressNextTap;
     private bool _animateItems;
+
+    /// <summary>是否显示以 . 开头的隐藏文件。</summary>
+    private bool _showHidden;
 
     public ObservableCollection<FileItem> Items { get; } = new();
     public ObservableCollection<FileItem> Changes { get; } = new();
@@ -63,6 +69,11 @@ public partial class MainPage : ContentPage
         : Application.Current?.RequestedTheme == AppTheme.Dark
             ? Color.FromArgb("#4C5468")
             : Color.FromArgb("#9AA1B2");
+
+    /// <summary>服务器运行状态文本（含局域网 IP），显示在顶栏。</summary>
+    public string ServerStatus => LocalServerService.Shared.IsRunning
+        ? $"服务运行中 · {LocalServerService.Shared.Url}"
+        : string.Empty;
 
     private bool _isLoading;
     public bool IsLoading
@@ -107,6 +118,29 @@ public partial class MainPage : ContentPage
             OnPropertyChanged();
         }
     }
+
+    /// <summary>是否显示隐藏文件（. 开头）。</summary>
+    public bool ShowHidden
+    {
+        get => _showHidden;
+        private set
+        {
+            if (_showHidden == value) return;
+            _showHidden = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HiddenToggleLabel));
+            OnPropertyChanged(nameof(HiddenDotColor));
+        }
+    }
+
+    public string HiddenToggleLabel => _showHidden ? "隐藏文件：开" : "隐藏文件：关";
+
+    /// <summary>隐藏文件开关的指示色：开启时紫色，关闭时灰色。</summary>
+    public Color HiddenDotColor => _showHidden
+        ? Color.FromArgb("#7C5CFF")
+        : Application.Current?.RequestedTheme == AppTheme.Dark
+            ? Color.FromArgb("#4C5468")
+            : Color.FromArgb("#9AA1B2");
 
     /// <summary>顶栏根目录显示名。</summary>
     public string RootLabel => _root == StorageAccess.ExternalRoot
@@ -191,9 +225,32 @@ public partial class MainPage : ContentPage
 
             await TlsBootstrap.EnsureCaBundleAsync();
 
-            _root = await TestRepoFactory.EnsureAsync();
-            BranchName = GitService.GetBranchName(_root);
+            // 启动路径：优先上次退出路径，其次全盘存储（有权限时），最后才回退演示仓库。
+            var last = Preferences.Default.Get("last_path", string.Empty);
+            if (last.Length > 0 && Directory.Exists(last))
+            {
+                var root = ResolveRootFromLastPath(last);
+                var rel = ResolveRelativeFromLastPath(last);
 
+                _root = root;
+                _relativePath = rel;
+                ApplyRepoContext(root);
+                OnPropertyChanged(nameof(RootLabel));
+                await LoadAsync();
+                return;
+            }
+
+            if (StorageAccess.HasAllFilesAccess() && StorageAccess.ExternalRootExists())
+            {
+                SwitchRoot(StorageAccess.ExternalRoot);
+                return;
+            }
+
+            var demoRepo = await TestRepoFactory.EnsureAsync();
+            _root = demoRepo;
+            _relativePath = string.Empty;
+            ApplyRepoContext(demoRepo);
+            OnPropertyChanged(nameof(RootLabel));
             await LoadAsync();
         }
         catch (Exception ex)
@@ -206,19 +263,67 @@ public partial class MainPage : ContentPage
         }
     }
 
+    /// <summary>根据根路径刷新仓库识别与分支名（不触发重新加载）。</summary>
+    private void ApplyRepoContext(string root)
+    {
+        var repo = GitService.DiscoverRepository(root);
+        IsGitRepo = repo is not null;
+
+        BranchName = IsGitRepo
+            ? GitService.GetBranchName(repo!)
+            : "外部目录";
+    }
+
+    /// <summary>从上次记录的路径里恢复浏览根：能发现 Git 仓库就用仓库根，否则用外部存储根。</summary>
+    private string ResolveRootFromLastPath(string lastPath)
+    {
+        var repo = GitService.DiscoverRepository(lastPath);
+        if (repo is not null) return repo;
+
+        // 在外部存储内部：回到 /storage/emulated/0 这个根，让 relativePath 承载剩余部分
+        if (lastPath.StartsWith(StorageAccess.ExternalRoot, StringComparison.Ordinal))
+            return StorageAccess.ExternalRoot;
+
+        return Path.GetDirectoryName(lastPath) ?? lastPath;
+    }
+
+    private string ResolveRelativeFromLastPath(string lastPath)
+    {
+        var root = ResolveRootFromLastPath(lastPath);
+        if (root == lastPath) return string.Empty;
+
+        var rel = Path.GetRelativePath(root, lastPath);
+        return rel.Replace(Path.DirectorySeparatorChar, '/').Trim('/');
+    }
+
+    protected override void OnDisappearing()
+    {
+        base.OnDisappearing();
+        // 记录当前路径，下次启动恢复
+        if (_root.Length > 0)
+        {
+            var full = string.IsNullOrEmpty(_relativePath)
+                ? _root
+                : Path.Combine(_root, _relativePath.Replace('/', Path.DirectorySeparatorChar));
+            Preferences.Default.Set("last_path", full);
+        }
+    }
+
     /// <summary>切换浏览根（Git 仓库 / 手机存储），并重置到该根的顶层。</summary>
     private void SwitchRoot(string root)
     {
         _root = root;
         _relativePath = string.Empty;
-        IsGitRepo = GitService.IsRepository(root);
 
-        BranchName = IsGitRepo
-            ? GitService.GetBranchName(root)
-            : "外部目录";
+        // 向上逐层查 .git，手机存储的子目录里也能识别出仓库
+        var repo = GitService.DiscoverRepository(root);
+        if (repo is not null) _root = repo;
+
+        ApplyRepoContext(_root);
 
         OnPropertyChanged(nameof(RootLabel));
         OnPropertyChanged(nameof(ServerColor));
+                OnPropertyChanged(nameof(ServerStatus));
         _ = LoadAsync();
     }
 
@@ -233,7 +338,11 @@ public partial class MainPage : ContentPage
             // 仓库根按 Git 视角列（带 M/U/D）；其他路径只按纯文件系统列
             var items = IsGitRepo
                 ? await _git.GetChildrenAsync(_root, _relativePath)
-                : await FileOperations.ListAsync(_root, _relativePath);
+                : await FileOperations.ListAsync(_root, _relativePath, _showHidden);
+
+            // Git 视角列出来的也会包含 .git，需要统一按 showHidden 过滤一次
+            if (!_showHidden)
+                items = items.Where(i => !i.Name.StartsWith('.')).ToList();
 
             // 只有真正换目录/刷新时才播放入场动画；
             // 滚动复用触发的 Loaded 会在窗口期内被 _animateItems 挡掉，避免来回闪。
@@ -329,7 +438,14 @@ public partial class MainPage : ContentPage
                 return;
             }
 
-            // 按扩展名分流：代码进编辑器、图片进全屏预览、其余给体积提示
+            // M 状态的文件：先问编辑还是看差异
+            if (IsGitRepo && item.GitStatus == GitFileStatus.Modified)
+            {
+                await OpenModifiedFileAsync(item);
+                return;
+            }
+
+            // 按扩展名分流：代码进编辑器、图片进全屏预览、压缩/二进制交给系统
             switch (FileKinds.Classify(item.FullPath))
             {
                 case FileKind.Text:
@@ -337,11 +453,11 @@ public partial class MainPage : ContentPage
                     break;
 
                 case FileKind.Image:
-                    await Navigation.PushAsync(new ImagePreviewPage(item));
+                    await OpenImagePreviewAsync(item);
                     break;
 
                 default:
-                    await ShowBinaryInfoAsync(item);
+                    await OpenWithSystemAsync(item);
                     break;
             }
         }
@@ -352,22 +468,58 @@ public partial class MainPage : ContentPage
         }
     }
 
-    private async Task ShowBinaryInfoAsync(FileItem item)
+    private async Task OpenModifiedFileAsync(FileItem item)
     {
+        var action = await DisplayActionSheetAsync(item.Name, "取消", null, "编辑文件", "查看差异 (Diff)");
+
+        if (action == "编辑文件") await OpenEditorAsync(item);
+        else if (action == "查看差异 (Diff)") await OpenDiffAsync(item);
+    }
+
+    private async Task OpenDiffAsync(FileItem item)
+    {
+        IsLoading = true;
         try
         {
-            var size = await Task.Run(() => FileOperations.SizeOf(item.FullPath));
+            var diff = await _git.GetFileDiffAsync(_root, item.RelativePath);
+            if (string.IsNullOrWhiteSpace(diff))
+            {
+                await this.SafeAlertAsync("没有差异", "该文件没有未提交的修改。", "好");
+                return;
+            }
 
-            await this.SafeAlertAsync(item.Name,
-                $"路径：{item.RelativePath}\n" +
-                $"大小：{FileOperations.FormatSize(size)}\n\n" +
-                "暂不支持直接预览。", "好");
+            await Navigation.PushAsync(new DiffPage(item.Name, diff));
         }
         catch (Exception ex)
         {
-            AppLog.Error("binary-info", ex);
-            await this.SafeAlertAsync(item.Name,
-                $"路径：{item.RelativePath}\n\n无法读取该文件的信息。", "好");
+            await this.SafeAlertAsync("读取差异失败", ex.Message, "好");
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task OpenImagePreviewAsync(FileItem item)
+    {
+        // 传入同目录的兄弟图片，支持左右滑动切换
+        var siblings = Items.Where(i => !i.IsDirectory && FileKinds.Classify(i.FullPath) == FileKind.Image).ToList();
+        await Navigation.PushAsync(new ImagePreviewPage(item, siblings));
+    }
+
+    /// <summary>zip / 7z / 未知二进制：调起系统默认应用打开，而不是弹「不支持」。</summary>
+    private async Task OpenWithSystemAsync(FileItem item)
+    {
+        try
+        {
+            var fullPath = item.FullPath;
+            await Launcher.Default.OpenAsync(new OpenFileRequest(item.Name, new ReadOnlyFile(fullPath)));
+        }
+        catch (Exception ex)
+        {
+            AppLog.Error("open-with-system", ex);
+            await this.SafeAlertAsync("无法打开",
+                $"没有应用能处理这个文件：{item.Name}", "好");
         }
     }
 
@@ -467,8 +619,9 @@ public partial class MainPage : ContentPage
         {
             try
             {
-                var url = server.Start(_root);
+                var url = server.Start(_root, AppSettings.ServerPort);
                 OnPropertyChanged(nameof(ServerColor));
+                OnPropertyChanged(nameof(ServerStatus));
 
                 await this.SafeAlertAsync("服务已启动",
                     $"电脑浏览器访问：\n{url}\n\n" +
@@ -500,6 +653,7 @@ public partial class MainPage : ContentPage
             case "停止服务":
                 server.Stop();
                 OnPropertyChanged(nameof(ServerColor));
+                OnPropertyChanged(nameof(ServerStatus));
                 break;
         }
     }
@@ -528,10 +682,103 @@ public partial class MainPage : ContentPage
 
     private async void OnMoveTapped(object? sender, EventArgs e) => await CaptureSelectionAsync(true);
 
+    /// <summary>多选状态下暂存选中文件（模块三第2点）。仅 Git 仓库中可用。</summary>
+    private async void OnStageTapped(object? sender, EventArgs e)
+    {
+        var selected = SelectedItems;
+        if (selected.Count == 0) return;
+
+        if (!IsGitRepo)
+        {
+            await this.SafeAlertAsync("不是 Git 仓库", "当前目录不在 Git 仓库中，无法暂存。", "好");
+            return;
+        }
+
+        // 拦截 .git 和目录（目录用 Commands.Stage 会递归暂存，风险大）
+        var files = selected.Where(i => !i.IsDirectory && i.Name != ".git").Select(i => i.RelativePath).ToList();
+        if (files.Count == 0)
+        {
+            await this.SafeAlertAsync("无可暂存项", "请选择文件（目录暂存请进入后再选）。", "好");
+            return;
+        }
+
+        try
+        {
+            var count = await _git.StageFilesAsync(_root, files);
+            await this.SafeAlertAsync("已暂存", $"已暂存 {count} 个文件。", "好");
+        }
+        catch (Exception ex)
+        {
+            await this.SafeAlertAsync("暂存失败", ex.Message, "好");
+        }
+
+        ExitSelection();
+        await LoadAsync();
+    }
+
+    /// <summary>解压当前选中的 zip 到当前目录（模块二第3点）。</summary>
+    private async void OnExtractTapped(object? sender, EventArgs e)
+    {
+        var selected = SelectedItems;
+        if (selected.Count == 0) return;
+
+        var zips = selected.Where(i => !i.IsDirectory && FileKinds.Classify(i.FullPath) == FileKind.Binary
+                                       && Path.GetExtension(i.FullPath).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+                           .ToList();
+
+        if (zips.Count == 0)
+        {
+            await this.SafeAlertAsync("没有 zip", "请选择 .zip 文件。", "好");
+            return;
+        }
+
+        var targetDirectory = RepoPath.Combine(_root, _relativePath);
+
+        // 解压前先统一问一次覆盖策略，避免逐个文件弹窗
+        var policy = await DisplayActionSheetAsync(
+            "解压遇到同名文件时", "取消", null,
+            "覆盖", "保留两者", "跳过");
+
+        ConflictAction action;
+        if (policy == "保留两者") action = ConflictAction.KeepBoth;
+        else if (policy == "跳过") action = ConflictAction.Skip;
+        else if (policy == "覆盖") action = ConflictAction.Replace;
+        else return;
+
+        try
+        {
+            await Task.Run(() =>
+            {
+                foreach (var zip in zips)
+                {
+                    FileOperations.ExtractZip(zip.FullPath, targetDirectory, (_, _) => action);
+                }
+            });
+
+            await this.SafeAlertAsync("已解压", $"解压 {zips.Count} 个压缩包到当前目录。", "好");
+        }
+        catch (Exception ex)
+        {
+            await this.SafeAlertAsync("解压失败", ex.Message, "好");
+        }
+
+        ExitSelection();
+        await LoadAsync();
+    }
+
     private async void OnDeleteTapped(object? sender, EventArgs e)
     {
         var selected = SelectedItems;
         if (selected.Count == 0) return;
+
+        // 防呆：禁止对 .git 或系统级隐藏目录动手
+        var forbidden = selected.Where(IsProtectedPath).ToList();
+        if (forbidden.Count > 0)
+        {
+            await this.SafeAlertAsync("操作被拦截",
+                $"以下项目是系统关键目录，已阻止操作：\n{string.Join("\n", forbidden.Select(i => i.Name))}", "好");
+            return;
+        }
 
         var confirmed = await this.SafeConfirmAsync("删除", $"确定删除 {selected.Count} 项？该操作不可撤销。", "删除", "取消");
         if (!confirmed) return;
@@ -540,7 +787,7 @@ public partial class MainPage : ContentPage
         {
             await Task.Run(() =>
             {
-                foreach (var item in selected) _git.DeleteFile(item.FullPath);
+                foreach (var item in selected) MoveToTrash(item.FullPath);
             });
         }
         catch (Exception ex)
@@ -550,6 +797,46 @@ public partial class MainPage : ContentPage
 
         ExitSelection();
         await LoadAsync();
+    }
+
+    /// <summary>.git 目录、以及 /storage/emulated/0 下的 Android、DCIM 等系统目录禁止删除/移动/覆盖。</summary>
+    private static bool IsProtectedPath(FileItem item)
+    {
+        var name = item.Name;
+
+        if (name == ".git") return true;
+
+        if (item.IsDirectory)
+        {
+            var full = item.FullPath.Replace('\\', '/');
+            // 外部存储根下的系统目录
+            if (full.StartsWith(StorageAccess.ExternalRoot + "/", StringComparison.Ordinal))
+            {
+                var rel = full[(StorageAccess.ExternalRoot.Length + 1)..];
+                var top = rel.Split('/')[0];
+                if (top is "Android" or "DCIM" or "Movies" or "Music" or "Pictures" or "Alarms" or "Ringtones" or "Notifications" or "Download" or "MIUI" or "Documents")
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>删除进沙盒回收站而不是直接物理删除，给「清理回收站」留数据源。</summary>
+    private static void MoveToTrash(string path)
+    {
+        var trash = Path.Combine(FileSystem.AppDataDirectory, ".trash");
+        Directory.CreateDirectory(trash);
+
+        var name = Path.GetFileName(path);
+        var target = Path.Combine(trash, name);
+
+        // 回收站里同名：追加时间戳
+        if (File.Exists(target) || Directory.Exists(target))
+            target = Path.Combine(trash, $"{Path.GetFileNameWithoutExtension(name)}-{DateTime.Now:HHmmss}{Path.GetExtension(name)}");
+
+        if (Directory.Exists(path)) Directory.Move(path, target);
+        else if (File.Exists(path)) File.Move(path, target);
     }
 
     private async void OnRenameTapped(object? sender, EventArgs e)
@@ -605,15 +892,46 @@ public partial class MainPage : ContentPage
 
         var targetDirectory = RepoPath.Combine(_root, _relativePath);
         var isCut = _clipboardIsCut;
+        var sources = _clipboard.ToList();
+
+        // 先在同线程预扫描冲突，逐个决策（支持「应用到所有」），决策完再统一执行，避免后台线程弹窗
+        var decisions = new Dictionary<string, ConflictAction>(StringComparer.Ordinal);
+        ConflictAction? applyToAll = null;
+
+        foreach (var source in sources)
+        {
+            var target = Path.Combine(targetDirectory, Path.GetFileName(source));
+            if (!File.Exists(target) && !Directory.Exists(target)) continue;
+
+            ConflictAction action;
+            if (applyToAll is not null)
+            {
+                action = applyToAll.Value;
+            }
+            else
+            {
+                var choice = await ResolveConflictOnUiAsync(Path.GetFileName(source));
+                if (choice is null) return;                 // 用户取消
+                if (choice.ApplyToAll) applyToAll = choice.Action;
+                action = choice.Action;
+            }
+
+            if (action == ConflictAction.Skip) continue;
+            decisions[source] = action;
+        }
 
         try
         {
             await Task.Run(() =>
             {
-                foreach (var source in _clipboard.ToList())
+                foreach (var source in sources)
                 {
-                    if (isCut) FileOperations.MoveTo(source, targetDirectory);
-                    else FileOperations.CopyTo(source, targetDirectory);
+                    var action = decisions.TryGetValue(source, out var d) ? d : ConflictAction.Replace;
+
+                    if (isCut)
+                        FileOperations.MoveToWithConflict(source, targetDirectory, (_, _) => action);
+                    else
+                        FileOperations.CopyToWithConflict(source, targetDirectory, (_, _) => action);
                 }
             });
         }
@@ -630,6 +948,25 @@ public partial class MainPage : ContentPage
         await LoadAsync();
     }
 
+    private sealed record ConflictChoice(ConflictAction Action, bool ApplyToAll);
+
+    /// <summary>弹冲突选择（调用方已在主线程）。用户取消返回 null。</summary>
+    private async Task<ConflictChoice?> ResolveConflictOnUiAsync(string name)
+    {
+        var action = await DisplayActionSheetAsync(
+            $"目标已存在：{name}", "取消", null,
+            "替换", "保留两者", "跳过", "替换（应用到所有）");
+
+        return action switch
+        {
+            "替换" => new ConflictChoice(ConflictAction.Replace, false),
+            "保留两者" => new ConflictChoice(ConflictAction.KeepBoth, false),
+            "跳过" => new ConflictChoice(ConflictAction.Skip, false),
+            "替换（应用到所有）" => new ConflictChoice(ConflictAction.Replace, true),
+            _ => null
+        };
+    }
+
     private void NotifyClipboard()
     {
         OnPropertyChanged(nameof(ClipboardVisible));
@@ -640,6 +977,12 @@ public partial class MainPage : ContentPage
     // ---------------------------------------------------------------- 导航
 
     private async void OnUpTapped(object? sender, TappedEventArgs e) => await GoUpAsync();
+
+    private async void OnToggleHiddenTapped(object? sender, TappedEventArgs e)
+    {
+        ShowHidden = !ShowHidden;
+        await LoadAsync();
+    }
 
     private async Task GoUpAsync()
     {
@@ -794,18 +1137,80 @@ public partial class MainPage : ContentPage
 
     private async void OnSwitchRootTapped(object? sender, TappedEventArgs e)
     {
-        var action = await DisplayActionSheetAsync("浏览位置", "取消", null,
-            _root == StorageAccess.ExternalRoot ? "返回演示仓库" : "打开手机存储");
+        var options = new List<string>();
+        if (_root != StorageAccess.ExternalRoot) options.Add("打开手机存储");
+        else options.Add("返回演示仓库");
 
-        if (action == "打开手机存储")
+        options.Add("书签…");
+        options.Add("设置…");
+
+        var action = await DisplayActionSheetAsync("浏览位置", "取消", null, options.ToArray());
+
+        switch (action)
         {
-            OnPhoneStorageTapped(sender, e);
+            case "打开手机存储":
+                OnPhoneStorageTapped(sender, e);
+                break;
+
+            case "返回演示仓库":
+                var repo = await TestRepoFactory.EnsureAsync();
+                SwitchRoot(repo);
+                break;
+
+            case "书签…":
+                await ShowBookmarksAsync();
+                break;
+
+            case "设置…":
+                await Navigation.PushAsync(new SettingsPage());
+                break;
         }
-        else if (action == "返回演示仓库")
+    }
+
+    private async Task ShowBookmarksAsync()
+    {
+        var builtIn = BookmarkStore.BuiltIn;
+        var custom = BookmarkStore.Custom;
+
+        var options = new List<string>();
+        foreach (var b in builtIn) options.Add(b.Name);
+        foreach (var b in custom) options.Add($"★ {b.Name}");
+        options.Add("＋ 添加当前目录为书签");
+
+        var choice = await DisplayActionSheetAsync("快捷书签", "取消", null, options.ToArray());
+        if (choice is null) return;
+
+        if (choice.StartsWith("★ ", StringComparison.Ordinal))
         {
-            var repo = await TestRepoFactory.EnsureAsync();
-            SwitchRoot(repo);
+            // 打开自定义书签
+            var name = choice[2..];
+            var bookmark = custom.FirstOrDefault(b => b.Name == name);
+            if (bookmark is not null && Directory.Exists(bookmark.Path))
+                SwitchRoot(bookmark.Path);
+            return;
         }
+
+        if (choice == "＋ 添加当前目录为书签")
+        {
+            var current = string.IsNullOrEmpty(_relativePath)
+                ? _root
+                : Path.Combine(_root, _relativePath.Replace('/', Path.DirectorySeparatorChar));
+
+            var label = await DisplayPromptAsync("添加书签", "书签名称", "保存", "取消",
+                Path.GetFileName(current.TrimEnd('/', '\\')));
+            if (string.IsNullOrWhiteSpace(label)) return;
+
+            BookmarkStore.Add(label, current);
+            await this.SafeAlertAsync("已添加", $"书签「{label}」已保存。", "好");
+            return;
+        }
+
+        // 内置书签
+        var target = builtIn.FirstOrDefault(b => b.Name == choice);
+        if (target is not null && Directory.Exists(target.Path))
+            SwitchRoot(target.Path);
+        else if (target is not null)
+            await this.SafeAlertAsync("目录不存在", target.Path, "好");
     }
 
     // ---------------------------------------------------------------- Git 抽屉

@@ -7,7 +7,9 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
-        UserAppTheme = AppTheme.Unspecified; // 跟随系统亮/暗
+
+        // 恢复用户上次选择的主题（默认跟随系统）
+        UserAppTheme = AppSettings.Theme;
 
         // 主题切换时状态栏图标颜色要跟着翻转，否则亮色下白图标会看不见
         RequestedThemeChanged += (_, _) => StatusBar.Refresh();

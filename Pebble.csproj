@@ -34,7 +34,10 @@
 
 		<!-- Release：AOT 要求必须开裁剪，所以用 partial（只裁完全没用到的程序集），
 		     并把 LibGit2Sharp 整体钉住——它靠反射和 P/Invoke，激进裁剪会让 Commit/Status 在运行期炸。 -->
-		<PublishTrimmed Condition="'$(Configuration)' == 'Release'">true</PublishTrimmed>
+		<!-- 暂时关掉裁剪和 AOT：Release 下 WebView 打开即闪退，
+		     且没有 managed 异常（native 崩），先用这个版本验证是不是裁剪导致 -->
+		<PublishTrimmed Condition="'$(Configuration)' == 'Release'">false</PublishTrimmed>
+		<RunAOTCompilation Condition="'$(Configuration)' == 'Release'">false</RunAOTCompilation>
 		<TrimMode Condition="'$(Configuration)' == 'Release'">partial</TrimMode>
 
 		<SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>

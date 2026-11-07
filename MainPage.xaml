@@ -40,6 +40,8 @@
                     <Label Text="{Binding CurrentPath}" FontSize="13"
                            TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}"
                            LineBreakMode="TailTruncation" />
+                    <Label Text="{Binding ServerStatus}" FontSize="9"
+                           TextColor="{AppThemeBinding Light=#22A55E, Dark=#4ADE80}" />
                 </VerticalStackLayout>
 
                 <HorizontalStackLayout Grid.Column="2" Spacing="8" VerticalOptions="Center">
@@ -78,6 +80,23 @@
                                HorizontalOptions="Center" VerticalOptions="Center">
                             <Label.GestureRecognizers>
                                 <TapGestureRecognizer Tapped="OnServerTapped" />
+                            </Label.GestureRecognizers>
+                        </Label>
+                    </Border>
+
+                    <!-- 隐藏文件开关 -->
+                    <Border WidthRequest="30" HeightRequest="30"
+                            BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#10131C}"
+                            Stroke="{AppThemeBinding Light=#DCE1EC, Dark=#1E2434}"
+                            StrokeThickness="1">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="9" />
+                        </Border.StrokeShape>
+                        <Label Text="·" FontSize="18" FontAttributes="Bold"
+                               TextColor="{Binding HiddenDotColor}"
+                               HorizontalOptions="Center" VerticalOptions="Center">
+                            <Label.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnToggleHiddenTapped" />
                             </Label.GestureRecognizers>
                         </Label>
                     </Border>
@@ -124,6 +143,13 @@
                     <Button Grid.Column="2" Text="删除" Clicked="OnDeleteTapped" Style="{StaticResource CtxButton}" />
                     <Button Grid.Column="3" Text="重命名" Clicked="OnRenameTapped" Style="{StaticResource CtxButton}" />
                     <Button Grid.Column="4" Text="压缩" Clicked="OnCompressTapped" Style="{StaticResource CtxButton}" />
+                </Grid>
+
+                <!-- 第二行：Git 暂存 + 解压（仅在需要时可用） -->
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+                    <Button Grid.Column="0" Text="暂存 (Stage)" Clicked="OnStageTapped" Style="{StaticResource CtxButton}"
+                            IsVisible="{Binding IsGitRepo}" />
+                    <Button Grid.Column="1" Text="解压 zip" Clicked="OnExtractTapped" Style="{StaticResource CtxButton}" />
                 </Grid>
             </VerticalStackLayout>
 

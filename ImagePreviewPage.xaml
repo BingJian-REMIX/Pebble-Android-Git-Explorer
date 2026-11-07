@@ -1,21 +1,34 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:Pebble.Models"
              x:Class="Pebble.ImagePreviewPage"
              BackgroundColor="#000000">
 
     <Grid>
 
-        <Image x:Name="Pic"
-               Aspect="AspectFit"
-               HorizontalOptions="Fill"
-               VerticalOptions="Fill">
-            <Image.GestureRecognizers>
-                <PinchGestureRecognizer PinchUpdated="OnPinchUpdated" />
-                <PanGestureRecognizer PanUpdated="OnPanUpdated" />
-                <TapGestureRecognizer Tapped="OnDoubleTapped" NumberOfTapsRequired="2" />
-            </Image.GestureRecognizers>
-        </Image>
+        <!-- 图片轮播：左右滑动切换 -->
+        <CarouselView x:Name="Carousel"
+                      Loop="False"
+                      HorizontalOptions="Fill"
+                      VerticalOptions="Fill"
+                      PositionChanged="OnPositionChanged">
+            <CarouselView.ItemTemplate>
+                <DataTemplate x:DataType="models:FileItem">
+                    <Image x:Name="Pic"
+                           Aspect="AspectFit"
+                           Source="{Binding FullPath}"
+                           HorizontalOptions="Fill"
+                           VerticalOptions="Fill">
+                        <Image.GestureRecognizers>
+                            <PinchGestureRecognizer PinchUpdated="OnPinchUpdated" />
+                            <PanGestureRecognizer PanUpdated="OnPanUpdated" />
+                            <TapGestureRecognizer Tapped="OnDoubleTapped" NumberOfTapsRequired="2" />
+                        </Image.GestureRecognizers>
+                    </Image>
+                </DataTemplate>
+            </CarouselView.ItemTemplate>
+        </CarouselView>
 
         <!-- 顶部信息条 -->
         <Grid ColumnDefinitions="*,Auto"
@@ -53,7 +66,7 @@
             </Border>
         </Grid>
 
-        <Label Text="双击放大 · 双指缩放"
+        <Label Text="左右滑动切换 · 双指缩放"
                FontSize="10"
                TextColor="#8B94A8"
                HorizontalOptions="Center"

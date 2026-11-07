@@ -3,15 +3,24 @@ using Pebble.Models;
 
 namespace Pebble.Services;
 
-/// <summary>纯文件系统操作：复制 / 移动 / 删除 / 重命名 / 压缩。全部基于 System.IO，不依赖平台 API。</summary>
+/// <summary>复制/移动/解压遇到同名目标时的处理策略。</summary>
+public enum ConflictAction
+{
+    Replace,      // 覆盖
+    KeepBoth,     // 保留两者（自动重命名）
+    Skip          // 跳过
+}
+
+/// <summary>纯文件系统操作：复制 / 移动 / 删除 / 重命名 / 压缩 / 解压。全部基于 System.IO，不依赖平台 API。</summary>
 public static class FileOperations
 {
     /// <summary>
     /// 列目录，不查 Git 状态，供浏览手机任意目录用。
     /// Android 上 Android/data、Android/obb 即使有全盘权限也读不了，
     /// 所以逐项 try，读不了的目录直接跳过而不是让整个列表失败。
+    /// showHidden=false 时过滤掉以 . 开头的项。
     /// </summary>
-    public static async Task<IReadOnlyList<FileItem>> ListAsync(string root, string relativePath)
+    public static async Task<IReadOnlyList<FileItem>> ListAsync(string root, string relativePath, bool showHidden = false)
     {
         return await Task.Run(() =>
         {
@@ -23,9 +32,12 @@ public static class FileOperations
 
             foreach (var path in SafeEnumerate(Directory.EnumerateDirectories(directory)))
             {
+                var name = Path.GetFileName(path);
+                if (!showHidden && name.StartsWith('.')) continue;
+
                 list.Add(new FileItem
                 {
-                    Name = Path.GetFileName(path),
+                    Name = name,
                     FullPath = path,
                     IsDirectory = true,
                     RelativePath = ToRelative(root, path)
@@ -34,9 +46,12 @@ public static class FileOperations
 
             foreach (var path in SafeEnumerate(Directory.EnumerateFiles(directory)))
             {
+                var name = Path.GetFileName(path);
+                if (!showHidden && name.StartsWith('.')) continue;
+
                 list.Add(new FileItem
                 {
-                    Name = Path.GetFileName(path),
+                    Name = name,
                     FullPath = path,
                     IsDirectory = false,
                     RelativePath = ToRelative(root, path)
@@ -94,6 +109,80 @@ public static class FileOperations
         return target;
     }
 
+    /// <summary>
+    /// 复制到目标目录，遇到同名时回调 resolve 决定策略。
+    /// resolve 返回 Replace 覆盖、KeepBoth 重命名、Skip 跳过（返回 null 表示跳过该项）。
+    /// </summary>
+    public static string? CopyToWithConflict(string sourcePath, string targetDirectory, Func<string, string, ConflictAction> resolve)
+    {
+        var target = Path.Combine(targetDirectory, Path.GetFileName(sourcePath));
+
+        if (File.Exists(target) || Directory.Exists(target))
+        {
+            var action = resolve(sourcePath, target);
+            switch (action)
+            {
+                case ConflictAction.Skip: return null;
+                case ConflictAction.KeepBoth: target = UniquePath(target); break;
+                case ConflictAction.Replace: break;
+            }
+        }
+
+        if (Directory.Exists(sourcePath))
+        {
+            if (Directory.Exists(target) && File.Exists(target))
+            {
+                // 目标是文件、源是目录，覆盖时先删目标文件
+                File.Delete(target);
+            }
+            CopyDirectory(sourcePath, target);
+        }
+        else
+        {
+            File.Copy(sourcePath, target, overwrite: true);
+        }
+
+        return target;
+    }
+
+    /// <summary>移动：目标已存在时回调决定策略。Skip 返回 null。目录移动用 Copy+Delete 实现，跨文件系统也能跑。</summary>
+    public static string? MoveToWithConflict(string sourcePath, string targetDirectory, Func<string, string, ConflictAction> resolve)
+    {
+        var target = Path.Combine(targetDirectory, Path.GetFileName(sourcePath));
+
+        if (File.Exists(target) || Directory.Exists(target))
+        {
+            var action = resolve(sourcePath, target);
+            switch (action)
+            {
+                case ConflictAction.Skip: return null;
+                case ConflictAction.KeepBoth: target = UniquePath(target); break;
+                case ConflictAction.Replace: break;
+            }
+        }
+
+        if (Directory.Exists(sourcePath))
+        {
+            if (Directory.Exists(target))
+                Directory.Delete(target, recursive: true);
+
+            // 目录跨卷 Move 会抛 IOException，用 Copy + Delete 兜底
+            try { Directory.Move(sourcePath, target); }
+            catch (IOException)
+            {
+                CopyDirectory(sourcePath, target);
+                Directory.Delete(sourcePath, recursive: true);
+            }
+        }
+        else
+        {
+            if (File.Exists(target)) File.Delete(target);
+            File.Move(sourcePath, target);
+        }
+
+        return target;
+    }
+
     public static string MoveTo(string sourcePath, string targetDirectory)
     {
         var target = UniquePath(Path.Combine(targetDirectory, Path.GetFileName(sourcePath)));
@@ -102,6 +191,42 @@ public static class FileOperations
         else File.Move(sourcePath, target);
 
         return target;
+    }
+
+    /// <summary>解压 zip 到 targetDirectory。同名时回调 resolve 决定策略（Skip 返回 null）。</summary>
+    public static List<string> ExtractZip(string zipPath, string targetDirectory, Func<string, string, ConflictAction> resolve)
+    {
+        var extracted = new List<string>();
+
+        using var archive = ZipFile.OpenRead(zipPath);
+        foreach (var entry in archive.Entries)
+        {
+            // 跳过目录项（下面会随文件自动创建）和路径穿越的恶意项
+            if (string.IsNullOrEmpty(entry.Name)) continue;
+
+            var destination = Path.GetFullPath(Path.Combine(targetDirectory, entry.FullName));
+
+            // 防 Zip Slip：解出的路径必须仍在 targetDirectory 内
+            var prefix = Path.GetFullPath(targetDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            if (!destination.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var dir = Path.GetDirectoryName(destination);
+            if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+            if (File.Exists(destination))
+            {
+                var action = resolve(entry.FullName, destination);
+                if (action == ConflictAction.Skip) continue;
+                if (action == ConflictAction.KeepBoth) destination = UniquePath(destination);
+                // Replace 直接覆盖（extractToFile overwrite=true）
+            }
+
+            entry.ExtractToFile(destination, overwrite: true);
+            extracted.Add(destination);
+        }
+
+        return extracted;
     }
 
     public static void Delete(string path)
