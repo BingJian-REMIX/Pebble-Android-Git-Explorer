@@ -67,8 +67,8 @@ public partial class MainPage : ContentPage
     public Color ServerColor => LocalServerService.Shared.IsRunning
         ? Color.FromArgb("#22C55E")
         : Application.Current?.RequestedTheme == AppTheme.Dark
-            ? Color.FromArgb("#4C5468")
-            : Color.FromArgb("#9AA1B2");
+            ? Color.FromArgb("#8B94A8")
+            : Color.FromArgb("#5F6779");
 
     /// <summary>服务器运行状态文本（含局域网 IP），显示在顶栏。</summary>
     public string ServerStatus => LocalServerService.Shared.IsRunning
@@ -139,8 +139,8 @@ public partial class MainPage : ContentPage
     public Color HiddenDotColor => _showHidden
         ? Color.FromArgb("#7C5CFF")
         : Application.Current?.RequestedTheme == AppTheme.Dark
-            ? Color.FromArgb("#4C5468")
-            : Color.FromArgb("#9AA1B2");
+            ? Color.FromArgb("#8B94A8")
+            : Color.FromArgb("#5F6779");
 
     /// <summary>顶栏根目录显示名。</summary>
     public string RootLabel => _root == StorageAccess.ExternalRoot
