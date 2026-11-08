@@ -27,11 +27,8 @@
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="10" />
                     </Border.StrokeShape>
-                    <Image Source="arrow_left" WidthRequest="18" HeightRequest="18"
+                    <Image Source="{AppThemeBinding Light=arrow_left_light, Dark=arrow_left}" WidthRequest="18" HeightRequest="18"
                            HorizontalOptions="Center" VerticalOptions="Center">
-                        <Image.Behaviors>
-                            <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}" />
-                        </Image.Behaviors>
                         <Image.GestureRecognizers>
                             <TapGestureRecognizer Tapped="OnUpTapped" />
                         </Image.GestureRecognizers>
@@ -62,11 +59,8 @@
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="9" />
                         </Border.StrokeShape>
-                        <Image Source="swap" WidthRequest="16" HeightRequest="16"
+                        <Image Source="{AppThemeBinding Light=swap_light, Dark=swap}" WidthRequest="16" HeightRequest="16"
                                HorizontalOptions="Center" VerticalOptions="Center">
-                            <Image.Behaviors>
-                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" />
-                            </Image.Behaviors>
                             <Image.GestureRecognizers>
                                 <TapGestureRecognizer Tapped="OnSwitchRootTapped" />
                             </Image.GestureRecognizers>
@@ -81,11 +75,8 @@
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="9" />
                         </Border.StrokeShape>
-                        <Image Source="wifi" WidthRequest="17" HeightRequest="17"
+                        <Image Source="{Binding WifiIconSource}" WidthRequest="17" HeightRequest="17"
                                HorizontalOptions="Center" VerticalOptions="Center">
-                            <Image.Behaviors>
-                                <toolkit:IconTintColorBehavior TintColor="{Binding ServerColor}" />
-                            </Image.Behaviors>
                             <Image.GestureRecognizers>
                                 <TapGestureRecognizer Tapped="OnServerTapped" />
                             </Image.GestureRecognizers>
@@ -100,11 +91,8 @@
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="9" />
                         </Border.StrokeShape>
-                        <Image Source="browse" WidthRequest="18" HeightRequest="18"
+                        <Image Source="{Binding BrowseIconSource}" WidthRequest="18" HeightRequest="18"
                                HorizontalOptions="Center" VerticalOptions="Center">
-                            <Image.Behaviors>
-                                <toolkit:IconTintColorBehavior TintColor="{Binding HiddenDotColor}" />
-                            </Image.Behaviors>
                             <Image.GestureRecognizers>
                                 <TapGestureRecognizer Tapped="OnToggleHiddenTapped" />
                             </Image.GestureRecognizers>
@@ -119,11 +107,8 @@
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="9" />
                         </Border.StrokeShape>
-                        <Image Source="check_double" WidthRequest="16" HeightRequest="16"
+                        <Image Source="{AppThemeBinding Light=check_double_light, Dark=check_double}" WidthRequest="16" HeightRequest="16"
                                HorizontalOptions="Center" VerticalOptions="Center">
-                            <Image.Behaviors>
-                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" />
-                            </Image.Behaviors>
                             <Image.GestureRecognizers>
                                 <TapGestureRecognizer Tapped="OnEnterSelectionTapped" />
                             </Image.GestureRecognizers>
@@ -145,11 +130,8 @@
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="10" />
                         </Border.StrokeShape>
-                        <Image Source="close" WidthRequest="14" HeightRequest="14"
+                        <Image Source="{AppThemeBinding Light=close_light, Dark=close}" WidthRequest="14" HeightRequest="14"
                                HorizontalOptions="Center" VerticalOptions="Center">
-                            <Image.Behaviors>
-                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}" />
-                            </Image.Behaviors>
                             <Image.GestureRecognizers>
                                 <TapGestureRecognizer Tapped="OnExitSelectionTapped" />
                             </Image.GestureRecognizers>
@@ -240,11 +222,7 @@
                                                 <Ellipse />
                                             </Border.StrokeShape>
                                             <Image Source="check" WidthRequest="11" HeightRequest="11"
-                                                   HorizontalOptions="Center" VerticalOptions="Center">
-                                                <Image.Behaviors>
-                                                    <toolkit:IconTintColorBehavior TintColor="#FFFFFF" />
-                                                </Image.Behaviors>
-                                            </Image>
+                                                   HorizontalOptions="Center" VerticalOptions="Center" />
                                         </Border>
 
                                         <Border IsVisible="{Binding HasChanges}"
@@ -295,9 +273,6 @@
                             </Border.Background>
                             <Image Source="git_branch" WidthRequest="26" HeightRequest="26"
                                    HorizontalOptions="Center" VerticalOptions="Center">
-                                <Image.Behaviors>
-                                    <toolkit:IconTintColorBehavior TintColor="#FFFFFF" />
-                                </Image.Behaviors>
                                 <Image.GestureRecognizers>
                                     <TapGestureRecognizer Tapped="OnGitFabTapped" />
                                 </Image.GestureRecognizers>
@@ -394,11 +369,8 @@
                             <Label Text="{Binding ChangeSummary}" FontSize="11"
                                    TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" />
                         </VerticalStackLayout>
-                        <Image Grid.Column="1" Source="close" WidthRequest="16" HeightRequest="16"
+                        <Image Grid.Column="1" Source="{AppThemeBinding Light=close_light, Dark=close}" WidthRequest="16" HeightRequest="16"
                                VerticalOptions="Center">
-                            <Image.Behaviors>
-                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" />
-                            </Image.Behaviors>
                             <Image.GestureRecognizers>
                                 <TapGestureRecognizer Tapped="OnSheetBackdropTapped" />
                             </Image.GestureRecognizers>

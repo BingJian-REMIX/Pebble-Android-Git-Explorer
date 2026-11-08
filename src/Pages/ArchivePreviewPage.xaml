@@ -21,11 +21,8 @@
                 <Border.StrokeShape>
                     <RoundRectangle CornerRadius="8" />
                 </Border.StrokeShape>
-                <Image Source="arrow_left" WidthRequest="18" HeightRequest="18"
+                <Image Source="{AppThemeBinding Light=arrow_left_light, Dark=arrow_left}" WidthRequest="18" HeightRequest="18"
                        HorizontalOptions="Center" VerticalOptions="Center">
-                    <Image.Behaviors>
-                        <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#1F2430, Dark=#E6E9F2}" />
-                    </Image.Behaviors>
                     <Image.GestureRecognizers>
                         <TapGestureRecognizer Tapped="OnBackClicked" />
                     </Image.GestureRecognizers>
@@ -72,17 +69,12 @@
                     <Grid Padding="16,11,16,11"
                           ColumnDefinitions="28,*,Auto">
                         <Image Grid.Column="0"
+                               Source="{AppThemeBinding Light=folder_light, Dark=folder}"
                                WidthRequest="20" HeightRequest="20"
                                VerticalOptions="Center">
-                            <Image.Behaviors>
-                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" />
-                            </Image.Behaviors>
                             <Image.Triggers>
-                                <DataTrigger TargetType="Image" Binding="{Binding IsDirectory}" Value="True">
-                                    <Setter Property="Source" Value="folder" />
-                                </DataTrigger>
                                 <DataTrigger TargetType="Image" Binding="{Binding IsDirectory}" Value="False">
-                                    <Setter Property="Source" Value="file" />
+                                    <Setter Property="Source" Value="{AppThemeBinding Light=file_light, Dark=file}" />
                                 </DataTrigger>
                             </Image.Triggers>
                         </Image>

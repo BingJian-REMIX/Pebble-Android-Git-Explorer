@@ -45,6 +45,14 @@ public partial class MainPage : ContentPage
         InitializeComponent();
         RefreshCommand = new Command(async () => await LoadAsync());
         BindingContext = this;
+        if (Application.Current is not null)
+            Application.Current.RequestedThemeChanged += OnRequestedThemeChanged;
+    }
+
+    private void OnRequestedThemeChanged(object? sender, AppThemeChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(WifiIconSource));
+        OnPropertyChanged(nameof(BrowseIconSource));
     }
 
     // ------------------------------------------------------------- 绑定属性
@@ -63,12 +71,14 @@ public partial class MainPage : ContentPage
         private set => SetField(ref _branchName, value);
     }
 
-    /// <summary>本地服务指示点：运行中为绿色，未启动跟随主题次要色。</summary>
-    public Color ServerColor => LocalServerService.Shared.IsRunning
-        ? Color.FromArgb("#22C55E")
-        : Application.Current?.RequestedTheme == AppTheme.Dark
-            ? Color.FromArgb("#8B94A8")
-            : Color.FromArgb("#5F6779");
+    /// <summary>服务器图标资源名：运行中=绿色，未启动=主题灰。</summary>
+    public string WifiIconSource =>
+        LocalServerService.Shared.IsRunning ? "wifi_on" : "wifi" + ThemeSuffix;
+
+    /// <summary>隐藏文件开关图标资源名：开启=紫色，关闭=主题灰。</summary>
+    public string BrowseIconSource => _showHidden ? "browse_on" : "browse" + ThemeSuffix;
+
+    private string ThemeSuffix => Application.Current?.RequestedTheme == AppTheme.Dark ? "" : "_light";
 
     /// <summary>服务器运行状态文本（含局域网 IP），显示在顶栏。</summary>
     public string ServerStatus => LocalServerService.Shared.IsRunning
@@ -129,18 +139,11 @@ public partial class MainPage : ContentPage
             _showHidden = value;
             OnPropertyChanged();
             OnPropertyChanged(nameof(HiddenToggleLabel));
-            OnPropertyChanged(nameof(HiddenDotColor));
+            OnPropertyChanged(nameof(BrowseIconSource));
         }
     }
 
     public string HiddenToggleLabel => _showHidden ? "隐藏文件：开" : "隐藏文件：关";
-
-    /// <summary>隐藏文件开关的指示色：开启时紫色，关闭时灰色。</summary>
-    public Color HiddenDotColor => _showHidden
-        ? Color.FromArgb("#7C5CFF")
-        : Application.Current?.RequestedTheme == AppTheme.Dark
-            ? Color.FromArgb("#8B94A8")
-            : Color.FromArgb("#5F6779");
 
     /// <summary>顶栏根目录显示名。</summary>
     public string RootLabel => _root == StorageAccess.ExternalRoot
@@ -322,7 +325,7 @@ public partial class MainPage : ContentPage
         ApplyRepoContext(_root);
 
         OnPropertyChanged(nameof(RootLabel));
-        OnPropertyChanged(nameof(ServerColor));
+        OnPropertyChanged(nameof(WifiIconSource));
                 OnPropertyChanged(nameof(ServerStatus));
         _ = LoadAsync();
     }
@@ -745,7 +748,7 @@ public partial class MainPage : ContentPage
             try
             {
                 var url = server.Start(_root, AppSettings.ServerPort);
-                OnPropertyChanged(nameof(ServerColor));
+                OnPropertyChanged(nameof(WifiIconSource));
                 OnPropertyChanged(nameof(ServerStatus));
 
                 await this.SafeAlertAsync("服务已启动",
@@ -777,7 +780,7 @@ public partial class MainPage : ContentPage
 
             case "停止服务":
                 server.Stop();
-                OnPropertyChanged(nameof(ServerColor));
+                OnPropertyChanged(nameof(WifiIconSource));
                 OnPropertyChanged(nameof(ServerStatus));
                 break;
         }

@@ -58,11 +58,8 @@
                 <Border.StrokeShape>
                     <Ellipse />
                 </Border.StrokeShape>
-                <Image Source="close" WidthRequest="14" HeightRequest="14"
+                <Image Source="close_white" WidthRequest="14" HeightRequest="14"
                        HorizontalOptions="Center" VerticalOptions="Center">
-                    <Image.Behaviors>
-                        <toolkit:IconTintColorBehavior TintColor="#FFFFFF" />
-                    </Image.Behaviors>
                     <Image.GestureRecognizers>
                         <TapGestureRecognizer Tapped="OnCloseTapped" />
                     </Image.GestureRecognizers>

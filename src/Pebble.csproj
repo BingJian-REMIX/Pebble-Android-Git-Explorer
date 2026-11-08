@@ -66,7 +66,8 @@
 
 	<ItemGroup>
 		<PackageReference Include="CommunityToolkit.Maui.MediaElement" Version="10.0.0" />
-		<!-- IconTintColorBehavior：为本项目 MAUI 10 缺失的 Image.TintColor 提供图标着色（静态/主题绑定/运行时绑定均可）。 -->
+		<!-- CommunityToolkit.Maui：SVG 图标已改为将颜色烤进源文件（MauiImage 的 TintColor 在本案不生效），
+		     此包仅保留 UseMauiCommunityToolkit() 初始化；图标一致性由多主题/状态 SVG 变体保证。 -->
 		<PackageReference Include="CommunityToolkit.Maui" Version="15.0.1" />
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
