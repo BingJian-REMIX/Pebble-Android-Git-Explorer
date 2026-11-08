@@ -53,6 +53,8 @@
 		<!-- 启动图：橙色 Logo 居中，深空黑底。BaseSize 给大一些，
 		     否则 Android 12+ 的 SplashScreen API 会把它缩得很小。 -->
 		<MauiSplashScreen Include="Resources\Splash\splash.png" Color="#07090F" BaseSize="512,512" />
+		<!-- TDesign 图标（SVG）：用 MauiImage 注册，XAML 以文件名（无扩展名）引用，配合 TintColor 着色。 -->
+		<MauiImage Include="Resources\Images\*.svg" />
 		<MauiFont Include="Resources\Fonts\*" />
 		<MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
 	</ItemGroup>
@@ -63,9 +65,16 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Include="CommunityToolkit.Maui.MediaElement" Version="10.0.0" />
+		<!-- IconTintColorBehavior：为本项目 MAUI 10 缺失的 Image.TintColor 提供图标着色（静态/主题绑定/运行时绑定均可）。 -->
+		<PackageReference Include="CommunityToolkit.Maui" Version="15.0.1" />
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="10.0.0" />
 		<PackageReference Include="LibGit2Sharp" Version="0.32.0" />
+		<!-- 应用内解压（zip/rar/7z/gz/分卷） -->
+		<PackageReference Include="SharpCompress" Version="0.39.0" />
+		<!-- Markdown 渲染 -->
+		<PackageReference Include="Markdig" Version="0.41.0" />
 		<!-- Windows/macOS/Linux 的原生库由 LibGit2Sharp.NativeBinaries 自带的 runtimes 提供。
 		     Android 不包含（官方包无 android RID，Redpoint 的第三方包也没有），
 		     需要自行提供 libgit2-5853918.so，详见 README「切到 Android」。 -->
@@ -79,8 +88,7 @@
 	</ItemGroup>
 
 	<!-- 从 NuGet 的 runtime 资产里剔除 glibc 版 libgit2，否则它会先占住 lib/<abi>/ 的位置（XA4301） -->
-	<Target Name="PebbleDropForeignGit2" AfterTargets="ResolvePackageAssets"
-	        Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+	<Target Name="PebbleDropForeignGit2" AfterTargets="ResolvePackageAssets" Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
 		<ItemGroup>
 			<NativeCopyLocalItems Remove="@(NativeCopyLocalItems)" Condition="'%(Filename)' == 'libgit2-5853918'" />
 			<RuntimeCopyLocalItems Remove="@(RuntimeCopyLocalItems)" Condition="'%(Filename)' == 'libgit2-5853918'" />

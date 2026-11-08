@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 
 namespace Pebble.Services;
@@ -8,7 +9,7 @@ namespace Pebble.Services;
 /// </summary>
 public static class CodePreview
 {
-    public static string BuildEditorHtml(string fileName, string content, bool dark, bool truncated)
+    public static string BuildEditorHtml(string fileName, string content, bool dark, bool truncated, string? lang = null)
     {
         var json = JsonSerializer.Serialize(content);
         var themeClass = dark ? "dark" : "light";
@@ -16,10 +17,20 @@ public static class CodePreview
             ? "<div id=\"banner\">文件过大，已截断显示</div>"
             : string.Empty;
 
+        // 不显式指定语言时，按文件名后缀猜（bat/cmd 用批处理高亮）
+        if (lang is null)
+        {
+            var ext = Path.GetExtension(fileName);
+            if (ext.Equals(".bat", StringComparison.OrdinalIgnoreCase)
+                || ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase))
+                lang = "batch";
+        }
+
         return Template
             .Replace("__THEME__", themeClass)
             .Replace("__TITLE__", System.Net.WebUtility.HtmlEncode(fileName))
             .Replace("__BANNER__", banner)
+            .Replace("__LANG__", lang ?? string.Empty)
             .Replace("__SRC__", json);
     }
 
@@ -75,6 +86,7 @@ __BANNER__
 </div>
 <script>
 const SOURCE = __SRC__;
+const LANG = "__LANG__";
 
 const KEYWORDS = new Set(('public private protected internal static readonly const class struct interface enum record ' +
   'void var let function return if else for foreach while switch case default break continue new using namespace ' +
@@ -86,6 +98,42 @@ const isIdStart = c => /[A-Za-z_$]/.test(c);
 const isId = c => /[A-Za-z0-9_$]/.test(c);
 const isDigit = c => c >= '0' && c <= '9';
 
+function highlightBatch(src) {
+  const KEYWORDS = new Set(('echo set if else goto call for in do shift title cd dir del delete copy move rem pause exit start setlocal endlocal cls color choice find findstr type off on not eq neq equ lss leq gtr geq defined errorlevel pushd popd attrib ren xcopy mkdir md rd rmdir timeout ver echo.' ).split(' '));
+  const lines = src.split('\n');
+  const parts = [];
+  for (const line of lines) {
+    const trimmed = line.replace(/^\s+/, '');
+    // 行注释：REM 或 ::
+    if (/^rem\b/i.test(trimmed) || /^::/.test(trimmed)) { parts.push(span('c', line) + '\n'); continue; }
+    // 标签：行首 :label
+    if (/^:[\w]/.test(trimmed)) { parts.push(span('k', line) + '\n'); continue; }
+    let row = '', i = 0, n = line.length;
+    while (i < n) {
+      const c = line[i];
+      if (c === '"') { let j = i + 1; while (j < n && line[j] !== '"') j++; j = Math.min(j + 1, n); row += span('s', line.slice(i, j)); i = j; continue; }
+      if (c === '%') { let j = i + 1; while (j < n && line[j] !== '%') j++; j = Math.min(j + 1, n); row += span('n', line.slice(i, j)); i = j; continue; }
+      const bq = line.indexOf('!', i + 1);
+      if (c === '!' && bq >= 0) { row += span('n', line.slice(i, bq + 1)); i = bq + 1; continue; }
+      if (isIdStart(c)) {
+        let j = i; while (j < n && isId(line[j])) j++;
+        const w = line.slice(i, j);
+        const before = i > 0 ? line[i - 1] : ' ';
+        if (/\s/.test(before) && KEYWORDS.has(w.toLowerCase())) row += span('k', w);
+        else row += span('i', w);
+        i = j; continue;
+      }
+      row += esc(c); i++;
+    }
+    parts.push(row + '\n');
+  }
+  return parts.join('');
+}
+
+function highlightDispatch(src) {
+  return LANG === 'batch' ? highlightBatch(src) : highlight(src);
+}
+
 function esc(s) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -94,7 +142,8 @@ function span(cls, text) {
 }
 
 function highlight(src) {
-  let out = '', i = 0;
+  const parts = [];
+  let i = 0;
   const n = src.length;
   while (i < n) {
     const c = src[i];
@@ -103,19 +152,19 @@ function highlight(src) {
     if (c === '/' && src[i + 1] === '*') {
       let e = src.indexOf('*/', i + 2);
       e = e < 0 ? n : e + 2;
-      out += span('c', src.slice(i, e)); i = e; continue;
+      parts.push(span('c', src.slice(i, e))); i = e; continue;
     }
     // 行注释
     if (c === '/' && src[i + 1] === '/') {
       let e = src.indexOf('\n', i);
       e = e < 0 ? n : e;
-      out += span('c', src.slice(i, e)); i = e; continue;
+      parts.push(span('c', src.slice(i, e))); i = e; continue;
     }
     // 行首 # 注释（shell / yml / python）
     if (c === '#' && (i === 0 || src[i - 1] === '\n')) {
       let e = src.indexOf('\n', i);
       e = e < 0 ? n : e;
-      out += span('c', src.slice(i, e)); i = e; continue;
+      parts.push(span('c', src.slice(i, e))); i = e; continue;
     }
     // 字符串
     if (c === '"' || c === "'" || c === '`') {
@@ -125,41 +174,41 @@ function highlight(src) {
         j++;
       }
       j = Math.min(j + 1, n);
-      out += span('s', src.slice(i, j)); i = j; continue;
+      parts.push(span('s', src.slice(i, j))); i = j; continue;
     }
     // 数字
     if (isDigit(c) && (i === 0 || !isId(src[i - 1]))) {
       let j = i;
       while (j < n && /[0-9a-fA-FxX._]/.test(src[j])) j++;
-      out += span('n', src.slice(i, j)); i = j; continue;
+      parts.push(span('n', src.slice(i, j))); i = j; continue;
     }
     // 标识符 / 关键字
     if (isIdStart(c)) {
       let j = i;
       while (j < n && isId(src[j])) j++;
       const word = src.slice(i, j);
-      out += span(KEYWORDS.has(word) ? 'k' : 'i', word);
+      parts.push(span(KEYWORDS.has(word) ? 'k' : 'i', word));
       i = j; continue;
     }
 
-    out += esc(c);
+    parts.push(esc(c));
     i++;
   }
-  return out;
+  return parts.join('');
 }
 
 const pre = document.getElementById('hl');
 const ed = document.getElementById('ed');
 const wrap = document.getElementById('wrap');
 
-pre.innerHTML = highlight(SOURCE);
+pre.innerHTML = highlightDispatch(SOURCE);
 ed.value = SOURCE;
 
 if (document.getElementById('banner')) document.body.classList.add('has-banner');
 
 let syncing = false;
 ed.addEventListener('input', () => {
-  pre.innerHTML = highlight(ed.value);
+  pre.innerHTML = highlightDispatch(ed.value);
   syncScroll();
 });
 function syncScroll() {
@@ -181,6 +230,25 @@ pre.addEventListener('scroll', () => {
 window.getContent = () => ed.value;
 window.setTheme = dark => document.body.classList.toggle('dark', dark);
 window.focusEditor = () => ed.focus();
+
+// 缩放统一由 JS 维护，避免依赖 MAUI 手势识别器（其会破坏 WebView 原生滚动）。
+let curZoom = 1;
+function clampZoom(z) { return Math.max(0.5, Math.min(5, z)); }
+window.setZoom = f => { curZoom = clampZoom(f); document.body.style.zoom = curZoom; };
+window.getZoom = () => curZoom;
+function pinchDist(t) { const dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY; return Math.hypot(dx, dy); }
+let pStart = 0, pStartZoom = 1;
+document.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) { pStart = pinchDist(e.touches); pStartZoom = curZoom; }
+}, { passive: true });
+document.addEventListener('touchmove', e => {
+  if (e.touches.length === 2) {
+    e.preventDefault();                       // 阻止浏览器默认捏合缩放
+    const d = pinchDist(e.touches);
+    curZoom = clampZoom(pStartZoom * d / pStart);
+    document.body.style.zoom = curZoom;
+  }
+}, { passive: false });
 </script>
 </body>
 </html>

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Pebble.MediaPage"
+             BackgroundColor="{AppThemeBinding Light=#F7F8FC, Dark=#07090F}">
+
+    <Grid RowDefinitions="Auto,*">
+        <Label x:Name="TitleLabel"
+               Grid.Row="0"
+               FontSize="12"
+               Padding="16,10,16,4"
+               LineBreakMode="MiddleTruncation"
+               TextColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" />
+
+        <Border x:Name="PlayerHost"
+                Grid.Row="1"
+                Margin="12,4,12,16"
+                Stroke="{AppThemeBinding Light=#DCE1EC, Dark=#1E2434}"
+                StrokeThickness="1"
+                BackgroundColor="#000000">
+            <Border.StrokeShape>
+                <RoundRectangle CornerRadius="18" />
+            </Border.StrokeShape>
+        </Border>
+    </Grid>
+</ContentPage>

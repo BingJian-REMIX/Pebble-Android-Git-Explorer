@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:Pebble"
              xmlns:models="clr-namespace:Pebble.Models"
+             xmlns:toolkit="clr-namespace:CommunityToolkit.Maui.Behaviors;assembly=CommunityToolkit.Maui"
              x:Class="Pebble.MainPage"
              x:DataType="local:MainPage"
              BackgroundColor="{AppThemeBinding Light=#F7F8FC, Dark=#07090F}"
@@ -26,12 +27,15 @@
                     <Border.StrokeShape>
                         <RoundRectangle CornerRadius="10" />
                     </Border.StrokeShape>
-                    <Label Text="←" FontSize="16" TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}"
+                    <Image Source="arrow_left" WidthRequest="18" HeightRequest="18"
                            HorizontalOptions="Center" VerticalOptions="Center">
-                        <Label.GestureRecognizers>
+                        <Image.Behaviors>
+                            <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}" />
+                        </Image.Behaviors>
+                        <Image.GestureRecognizers>
                             <TapGestureRecognizer Tapped="OnUpTapped" />
-                        </Label.GestureRecognizers>
-                    </Label>
+                        </Image.GestureRecognizers>
+                    </Image>
                 </Border>
 
                 <VerticalStackLayout Grid.Column="1" Spacing="3" VerticalOptions="Center">
@@ -58,13 +62,15 @@
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="9" />
                         </Border.StrokeShape>
-                        <Label Text="▤" FontSize="14" FontAttributes="Bold"
-                               TextColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}"
+                        <Image Source="swap" WidthRequest="16" HeightRequest="16"
                                HorizontalOptions="Center" VerticalOptions="Center">
-                            <Label.GestureRecognizers>
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" />
+                            </Image.Behaviors>
+                            <Image.GestureRecognizers>
                                 <TapGestureRecognizer Tapped="OnSwitchRootTapped" />
-                            </Label.GestureRecognizers>
-                        </Label>
+                            </Image.GestureRecognizers>
+                        </Image>
                     </Border>
 
                     <!-- 本地静态服务器开关 -->
@@ -75,13 +81,15 @@
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="9" />
                         </Border.StrokeShape>
-                        <Label Text="⇄" FontSize="15" FontAttributes="Bold"
-                               TextColor="{Binding ServerColor}"
+                        <Image Source="wifi" WidthRequest="17" HeightRequest="17"
                                HorizontalOptions="Center" VerticalOptions="Center">
-                            <Label.GestureRecognizers>
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="{Binding ServerColor}" />
+                            </Image.Behaviors>
+                            <Image.GestureRecognizers>
                                 <TapGestureRecognizer Tapped="OnServerTapped" />
-                            </Label.GestureRecognizers>
-                        </Label>
+                            </Image.GestureRecognizers>
+                        </Image>
                     </Border>
 
                     <!-- 隐藏文件开关 -->
@@ -92,13 +100,34 @@
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="9" />
                         </Border.StrokeShape>
-                        <Label Text="·" FontSize="18" FontAttributes="Bold"
-                               TextColor="{Binding HiddenDotColor}"
+                        <Image Source="browse" WidthRequest="18" HeightRequest="18"
                                HorizontalOptions="Center" VerticalOptions="Center">
-                            <Label.GestureRecognizers>
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="{Binding HiddenDotColor}" />
+                            </Image.Behaviors>
+                            <Image.GestureRecognizers>
                                 <TapGestureRecognizer Tapped="OnToggleHiddenTapped" />
-                            </Label.GestureRecognizers>
-                        </Label>
+                            </Image.GestureRecognizers>
+                        </Image>
+                    </Border>
+
+                    <!-- 进入多选（长按文件已改为「打开方式」，不再用于进多选） -->
+                    <Border WidthRequest="30" HeightRequest="30"
+                            BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#10131C}"
+                            Stroke="{AppThemeBinding Light=#DCE1EC, Dark=#1E2434}"
+                            StrokeThickness="1">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="9" />
+                        </Border.StrokeShape>
+                        <Image Source="check_double" WidthRequest="16" HeightRequest="16"
+                               HorizontalOptions="Center" VerticalOptions="Center">
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" />
+                            </Image.Behaviors>
+                            <Image.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnEnterSelectionTapped" />
+                            </Image.GestureRecognizers>
+                        </Image>
                     </Border>
                 </HorizontalStackLayout>
             </Grid>
@@ -116,13 +145,15 @@
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="10" />
                         </Border.StrokeShape>
-                        <Label Text="✕" FontSize="13"
-                               TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}"
+                        <Image Source="close" WidthRequest="14" HeightRequest="14"
                                HorizontalOptions="Center" VerticalOptions="Center">
-                            <Label.GestureRecognizers>
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}" />
+                            </Image.Behaviors>
+                            <Image.GestureRecognizers>
                                 <TapGestureRecognizer Tapped="OnExitSelectionTapped" />
-                            </Label.GestureRecognizers>
-                        </Label>
+                            </Image.GestureRecognizers>
+                        </Image>
                     </Border>
 
                     <Label Grid.Column="1" Text="{Binding SelectionSummary}" FontSize="14"
@@ -208,8 +239,12 @@
                                             <Border.StrokeShape>
                                                 <Ellipse />
                                             </Border.StrokeShape>
-                                            <Label Text="✓" FontSize="9" TextColor="#FFFFFF" FontAttributes="Bold"
-                                                   HorizontalOptions="Center" VerticalOptions="Center" />
+                                            <Image Source="check" WidthRequest="11" HeightRequest="11"
+                                                   HorizontalOptions="Center" VerticalOptions="Center">
+                                                <Image.Behaviors>
+                                                    <toolkit:IconTintColorBehavior TintColor="#FFFFFF" />
+                                                </Image.Behaviors>
+                                            </Image>
                                         </Border>
 
                                         <Border IsVisible="{Binding HasChanges}"
@@ -258,12 +293,15 @@
                                     <GradientStop Color="#3B82F6" Offset="1.0" />
                                 </LinearGradientBrush>
                             </Border.Background>
-                            <Label Text="⎇" FontSize="24" TextColor="#FFFFFF"
+                            <Image Source="git_branch" WidthRequest="26" HeightRequest="26"
                                    HorizontalOptions="Center" VerticalOptions="Center">
-                                <Label.GestureRecognizers>
+                                <Image.Behaviors>
+                                    <toolkit:IconTintColorBehavior TintColor="#FFFFFF" />
+                                </Image.Behaviors>
+                                <Image.GestureRecognizers>
                                     <TapGestureRecognizer Tapped="OnGitFabTapped" />
-                                </Label.GestureRecognizers>
-                            </Label>
+                                </Image.GestureRecognizers>
+                            </Image>
                         </Border>
 
                         <Border IsVisible="{Binding HasChanges}"
@@ -356,12 +394,15 @@
                             <Label Text="{Binding ChangeSummary}" FontSize="11"
                                    TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" />
                         </VerticalStackLayout>
-                        <Label Grid.Column="1" Text="✕" FontSize="15" VerticalOptions="Center"
-                               TextColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}">
-                            <Label.GestureRecognizers>
+                        <Image Grid.Column="1" Source="close" WidthRequest="16" HeightRequest="16"
+                               VerticalOptions="Center">
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" />
+                            </Image.Behaviors>
+                            <Image.GestureRecognizers>
                                 <TapGestureRecognizer Tapped="OnSheetBackdropTapped" />
-                            </Label.GestureRecognizers>
-                        </Label>
+                            </Image.GestureRecognizers>
+                        </Image>
                     </Grid>
 
                     <CollectionView Grid.Row="1" ItemsSource="{Binding Changes}">

@@ -445,19 +445,38 @@ public partial class MainPage : ContentPage
                 return;
             }
 
-            // 按扩展名分流：代码进编辑器、图片进全屏预览、压缩/二进制交给系统
+            // 按扩展名分流：文本进编辑器、图片/ svg 进预览、归档不解压预览、字体/媒体应用内预览、
+            // 未知扩展名或没有扩展名则弹「打开方式」让用户决定。
             switch (FileKinds.Classify(item.FullPath))
             {
                 case FileKind.Text:
+                    // .bak 备份文件：点击即弹「打开方式」，让"恢复备份"置顶
+                    if (IsBackup(item.FullPath)) { await ShowOpenWithAsync(item); break; }
                     await OpenEditorAsync(item);
                     break;
 
                 case FileKind.Image:
-                    await OpenImagePreviewAsync(item);
+                    if (FileKinds.IsSvg(item.FullPath))
+                        await Navigation.PushAsync(new SvgPreviewPage(item));
+                    else
+                        await OpenImagePreviewAsync(item);
+                    break;
+
+                case FileKind.Archive:
+                    // 不解压预览：只列举内部目录 / 文件，不往磁盘解压
+                    await Navigation.PushAsync(new ArchivePreviewPage(item));
+                    break;
+
+                case FileKind.Font:
+                    await Navigation.PushAsync(new FontPreviewPage(item));
+                    break;
+
+                case FileKind.Media:
+                    await Navigation.PushAsync(new MediaPage(item));
                     break;
 
                 default:
-                    await OpenWithSystemAsync(item);
+                    await ShowOpenWithAsync(item);
                     break;
             }
         }
@@ -507,7 +526,7 @@ public partial class MainPage : ContentPage
         await Navigation.PushAsync(new ImagePreviewPage(item, siblings));
     }
 
-    /// <summary>zip / 7z / 未知二进制：调起系统默认应用打开，而不是弹「不支持」。</summary>
+    /// <summary>调起系统默认应用打开文件（「打开方式」弹窗的兜底项，也用于未知类型）。</summary>
     private async Task OpenWithSystemAsync(FileItem item)
     {
         try
@@ -522,6 +541,112 @@ public partial class MainPage : ContentPage
                 $"没有应用能处理这个文件：{item.Name}", "好");
         }
     }
+
+    /// <summary>.bak 备份文件的判定。</summary>
+    private static bool IsBackup(string path)
+        => Path.GetExtension(path).Equals(".bak", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>恢复备份：用 .bak 覆盖同名原文件（去掉 .bak 后的文件）。</summary>
+    private async Task RestoreBackupAsync(FileItem item)
+    {
+        var target = item.FullPath;
+        if (target.EndsWith(".bak", StringComparison.OrdinalIgnoreCase))
+            target = target[..^4];
+
+        var targetName = Path.GetFileName(target);
+        var exists = File.Exists(target);
+
+        var confirm = await this.SafeConfirmAsync("恢复备份",
+            exists
+                ? $"将用「{item.Name}」覆盖「{targetName}」。确定继续？"
+                : $"目标「{targetName}」不存在，将从备份创建它。",
+            exists ? "恢复" : "创建", "取消");
+        if (!confirm) return;
+
+        try
+        {
+            File.Copy(item.FullPath, target, overwrite: true);
+            await this.SafeAlertAsync("已恢复", $"已用备份恢复：{targetName}", "好");
+        }
+        catch (Exception ex)
+        {
+            await this.SafeAlertAsync("恢复失败", ex.Message, "好");
+        }
+
+        await LoadAsync();
+    }
+
+    /// <summary>「打开方式」弹窗：按文件类型列出应用内操作 + 系统打开。长按文件、或点击未知/无扩展名文件时触发。</summary>
+    private async Task ShowOpenWithAsync(FileItem item)
+    {
+        var options = new List<string>();
+        var kind = FileKinds.Classify(item.FullPath);
+
+        switch (kind)
+        {
+            case FileKind.Text:
+                // .bak 备份文件：提供"恢复备份"（用备份覆盖同名原文件）
+                if (IsBackup(item.FullPath)) options.Add("恢复备份");
+                options.Add("编辑（源码）");
+                if (FileKinds.IsMarkdown(item.FullPath)) options.Add("Markdown 预览");
+                break;
+            case FileKind.Image:
+                if (FileKinds.IsSvg(item.FullPath)) options.Add("查看图像（WebView）");
+                else options.Add("预览图片");
+                break;
+            case FileKind.Archive:
+                options.Add("预览（不解压）");
+                options.Add("解压到当前目录");
+                break;
+            case FileKind.Font:
+                options.Add("字体预览");
+                break;
+            case FileKind.Media:
+                options.Add("播放");
+                break;
+            case FileKind.Unknown:
+                // 未知 / 无扩展名：提供 Pebble 自带的源码查看，而不是只有系统打开
+                options.Add("编辑（源码）");
+                break;
+        }
+
+        // 通用项：始终提供系统打开；未知类型至少能系统打开。
+        options.Add("系统打开");
+
+        var action = await DisplayActionSheetAsync(item.Name, "取消", null, options.ToArray());
+        if (action is null) return;
+
+        switch (action)
+        {
+            case "编辑（源码）": await OpenEditorAsync(item); break;
+            case "Markdown 预览": await OpenMarkdownPreviewAsync(item); break;
+            case "预览图片": await OpenImagePreviewAsync(item); break;
+            case "查看图像（WebView）": await Navigation.PushAsync(new SvgPreviewPage(item)); break;
+            case "恢复备份": await RestoreBackupAsync(item); break;
+            case "预览（不解压）": await Navigation.PushAsync(new ArchivePreviewPage(item)); break;
+            case "解压到当前目录": await ExtractArchivesAsync(new[] { item }); break;
+            case "字体预览": await Navigation.PushAsync(new FontPreviewPage(item)); break;
+            case "播放": await Navigation.PushAsync(new MediaPage(item)); break;
+            case "系统打开": await OpenWithSystemAsync(item); break;
+        }
+    }
+
+    /// <summary>从「打开方式」里的 Markdown 预览入口进入：直接打开编辑器并切到预览。</summary>
+    private async Task OpenMarkdownPreviewAsync(FileItem item)
+    {
+        var editor = new EditorPage(item, openPreview: true);
+        editor.Disappearing += async (_, _) => await LoadAsync();
+        await Navigation.PushAsync(editor);
+    }
+
+    /// <summary>顶栏「选择」按钮进入多选（长按文件已改为「打开方式」，不再用于进多选）。</summary>
+    private void EnterSelectionMode()
+    {
+        IsSelectionMode = true;
+        OnPropertyChanged(nameof(SelectionSummary));
+    }
+
+    private void OnEnterSelectionTapped(object? sender, TappedEventArgs e) => EnterSelectionMode();
 
     private void OnItemPressed(object? sender, PointerEventArgs e)
     {
@@ -540,7 +665,7 @@ public partial class MainPage : ContentPage
             _suppressNextTap = true;   // 长按后松开还会冒一次 Tap，屏蔽掉
 
             if (item.IsDirectory) _ = ShowDirectoryMenuAsync(item);
-            else EnterSelection(item);
+            else _ = ShowOpenWithAsync(item);
         };
         _pressTimer.Start();
     }
@@ -626,7 +751,7 @@ public partial class MainPage : ContentPage
                 await this.SafeAlertAsync("服务已启动",
                     $"电脑浏览器访问：\n{url}\n\n" +
                     $"根目录：{server.Root}\n\n" +
-                    "再点一次 ⇄ 可以停止服务。", "好");
+                    "再点一次该按钮可停止服务。", "好");
             }
             catch (Exception ex)
             {
@@ -716,21 +841,26 @@ public partial class MainPage : ContentPage
         await LoadAsync();
     }
 
-    /// <summary>解压当前选中的 zip 到当前目录（模块二第3点）。</summary>
+    /// <summary>多选模式下点「解压」：解压选中的全部归档（zip/rar/7z/gz/分卷）到当前目录。</summary>
     private async void OnExtractTapped(object? sender, EventArgs e)
     {
         var selected = SelectedItems;
         if (selected.Count == 0) return;
 
-        var zips = selected.Where(i => !i.IsDirectory && FileKinds.Classify(i.FullPath) == FileKind.Binary
-                                       && Path.GetExtension(i.FullPath).Equals(".zip", StringComparison.OrdinalIgnoreCase))
-                           .ToList();
-
-        if (zips.Count == 0)
+        var archives = selected.Where(i => !i.IsDirectory && FileKinds.Classify(i.FullPath) == FileKind.Archive).ToList();
+        if (archives.Count == 0)
         {
-            await this.SafeAlertAsync("没有 zip", "请选择 .zip 文件。", "好");
+            await this.SafeAlertAsync("没有压缩包", "请选择 zip / rar / 7z / gz 等压缩文件。", "好");
             return;
         }
+
+        await ExtractArchivesAsync(archives);
+    }
+
+    /// <summary>解压一组归档到当前目录（覆盖所有格式），含覆盖策略确认。</summary>
+    private async Task ExtractArchivesAsync(IReadOnlyList<FileItem> archives)
+    {
+        if (archives.Count == 0) return;
 
         var targetDirectory = RepoPath.Combine(_root, _relativePath);
 
@@ -749,20 +879,18 @@ public partial class MainPage : ContentPage
         {
             await Task.Run(() =>
             {
-                foreach (var zip in zips)
-                {
-                    FileOperations.ExtractZip(zip.FullPath, targetDirectory, (_, _) => action);
-                }
+                foreach (var archive in archives)
+                    ArchiveService.Extract(archive.FullPath, targetDirectory, (_, _) => action);
             });
 
-            await this.SafeAlertAsync("已解压", $"解压 {zips.Count} 个压缩包到当前目录。", "好");
+            await this.SafeAlertAsync("已解压", $"解压 {archives.Count} 个压缩包到当前目录。", "好");
         }
         catch (Exception ex)
         {
             await this.SafeAlertAsync("解压失败", ex.Message, "好");
         }
 
-        ExitSelection();
+        if (IsSelectionMode) ExitSelection();
         await LoadAsync();
     }
 
@@ -1174,23 +1302,22 @@ public partial class MainPage : ContentPage
 
         var options = new List<string>();
         foreach (var b in builtIn) options.Add(b.Name);
-        foreach (var b in custom) options.Add($"★ {b.Name}");
-        options.Add("＋ 添加当前目录为书签");
+        foreach (var b in custom) options.Add(b.Name);
+        options.Add("+ 添加当前目录为书签");
 
         var choice = await DisplayActionSheetAsync("快捷书签", "取消", null, options.ToArray());
         if (choice is null) return;
 
-        if (choice.StartsWith("★ ", StringComparison.Ordinal))
+        if (custom.Any(b => b.Name == choice))
         {
             // 打开自定义书签
-            var name = choice[2..];
-            var bookmark = custom.FirstOrDefault(b => b.Name == name);
+            var bookmark = custom.FirstOrDefault(b => b.Name == choice);
             if (bookmark is not null && Directory.Exists(bookmark.Path))
                 SwitchRoot(bookmark.Path);
             return;
         }
 
-        if (choice == "＋ 添加当前目录为书签")
+        if (choice == "+ 添加当前目录为书签")
         {
             var current = string.IsNullOrEmpty(_relativePath)
                 ? _root

@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:toolkit="clr-namespace:CommunityToolkit.Maui.Behaviors;assembly=CommunityToolkit.Maui"
+             x:Class="Pebble.ArchivePreviewPage"
+             BackgroundColor="{AppThemeBinding Light=#F7F8FC, Dark=#07090F}">
+
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <!-- 顶部导航栏：返回 + 当前路径面包屑 -->
+        <Grid Grid.Row="0"
+              ColumnDefinitions="Auto,*"
+              Padding="12,10,12,6"
+              ColumnSpacing="8">
+            <Border x:Name="BackButton"
+                    Grid.Column="0"
+                    WidthRequest="40" HeightRequest="34"
+                    StrokeThickness="0"
+                    Padding="0"
+                    BackgroundColor="{AppThemeBinding Light=#ECEFF6, Dark=#161B27}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="8" />
+                </Border.StrokeShape>
+                <Image Source="arrow_left" WidthRequest="18" HeightRequest="18"
+                       HorizontalOptions="Center" VerticalOptions="Center">
+                    <Image.Behaviors>
+                        <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#1F2430, Dark=#E6E9F2}" />
+                    </Image.Behaviors>
+                    <Image.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnBackClicked" />
+                    </Image.GestureRecognizers>
+                </Image>
+            </Border>
+            <Label x:Name="PathLabel"
+                   Grid.Column="1"
+                   FontSize="13"
+                   VerticalOptions="Center"
+                   LineBreakMode="MiddleTruncation"
+                   TextColor="{AppThemeBinding Light=#5B4BE0, Dark=#C4B5FD}" />
+        </Grid>
+
+        <!-- 头部信息卡：归档类型 + 汇总 -->
+        <VerticalStackLayout Grid.Row="1"
+                            Padding="16,10,16,10"
+                            Spacing="6">
+            <Label x:Name="TypeLabel"
+                   FontSize="12"
+                   FontAttributes="Bold"
+                   TextColor="{AppThemeBinding Light=#5B4BE0, Dark=#C4B5FD}" />
+            <Label x:Name="SummaryLabel"
+                   FontSize="13"
+                   TextColor="{AppThemeBinding Light=#6B7280, Dark=#9AA1B2}" />
+            <BoxView HeightRequest="1"
+                     BackgroundColor="{AppThemeBinding Light=#E3E8F0, Dark=#1E2434}" />
+        </VerticalStackLayout>
+
+        <!-- 归档内条目列表（仅列举，不解压） -->
+        <CollectionView x:Name="EntryList"
+                        Grid.Row="2"
+                        SelectionMode="Single"
+                        SelectionChanged="OnEntrySelected"
+                        ItemsSource="{Binding Entries}"
+                        BackgroundColor="Transparent">
+            <CollectionView.EmptyView>
+                <Label Text="（空文件夹或读取失败）"
+                       HorizontalOptions="Center"
+                       Margin="0,40,0,0"
+                       TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" />
+            </CollectionView.EmptyView>
+            <CollectionView.ItemTemplate>
+                <DataTemplate>
+                    <Grid Padding="16,11,16,11"
+                          ColumnDefinitions="28,*,Auto">
+                        <Image Grid.Column="0"
+                               WidthRequest="20" HeightRequest="20"
+                               VerticalOptions="Center">
+                            <Image.Behaviors>
+                                <toolkit:IconTintColorBehavior TintColor="{AppThemeBinding Light=#5F6779, Dark=#8B94A8}" />
+                            </Image.Behaviors>
+                            <Image.Triggers>
+                                <DataTrigger TargetType="Image" Binding="{Binding IsDirectory}" Value="True">
+                                    <Setter Property="Source" Value="folder" />
+                                </DataTrigger>
+                                <DataTrigger TargetType="Image" Binding="{Binding IsDirectory}" Value="False">
+                                    <Setter Property="Source" Value="file" />
+                                </DataTrigger>
+                            </Image.Triggers>
+                        </Image>
+                        <Label Grid.Column="1"
+                               FontSize="14"
+                               VerticalOptions="Center"
+                               LineBreakMode="MiddleTruncation"
+                               Text="{Binding Name}"
+                               TextColor="{AppThemeBinding Light=#1F2430, Dark=#E6E9F2}" />
+                        <Label Grid.Column="2"
+                               FontSize="12"
+                               VerticalOptions="Center"
+                               HorizontalOptions="End"
+                               Text="{Binding SizeText}"
+                               TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" />
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <!-- 读取中指示 -->
+        <ActivityIndicator x:Name="Busy"
+                           Grid.Row="2"
+                           IsRunning="{Binding Loading}"
+                           IsVisible="{Binding Loading}"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Start"
+                           Margin="0,22,0,0"
+                           Color="{AppThemeBinding Light=#7C5CFF, Dark=#C4B5FD}" />
+    </Grid>
+</ContentPage>

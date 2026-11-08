@@ -270,6 +270,10 @@ public sealed class LocalServerService : IDisposable
 
     private string BuildDirectoryListing(string directory, string requestPath)
     {
+        // 当前目录的绝对前缀（以 / 结尾），链接都用绝对路径，避免相对链接在深层/缺斜杠时解析错乱
+        var basePath = "/" + requestPath.Trim('/') + "/";
+        if (requestPath == "/" || requestPath == "") basePath = "/";
+
         var builder = new StringBuilder();
         builder.Append("<!DOCTYPE html><meta charset=\"utf-8\">")
                .Append("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">")
@@ -277,21 +281,27 @@ public sealed class LocalServerService : IDisposable
                .Append("a{color:#8b7cf6;text-decoration:none}li{margin:6px 0}code{color:#9aa1b2}</style>")
                .Append($"<h3>/{WebUtility.HtmlEncode(requestPath.TrimStart('/'))}</h3><ul>");
 
-        if (requestPath != "/")
-            builder.Append("<li><a href=\"../\">../</a></li>");
+        // 父级目录：去掉最后一段，仍保持绝对路径
+        if (requestPath != "/" && requestPath != "")
+        {
+            var parent = basePath.TrimEnd('/');
+            var slash = parent.LastIndexOf('/');
+            var parentPath = slash <= 0 ? "/" : parent[..(slash + 1)];
+            builder.Append($"<li><a href=\"{parentPath}\">../</a></li>");
+        }
 
         foreach (var dir in Directory.GetDirectories(directory)
                      .Where(d => !Path.GetFileName(d).Equals(".git", StringComparison.OrdinalIgnoreCase))
                      .OrderBy(Path.GetFileName))
         {
             var name = Path.GetFileName(dir);
-            builder.Append($"<li><a href=\"{Uri.EscapeDataString(name)}/\">{WebUtility.HtmlEncode(name)}/</a></li>");
+            builder.Append($"<li><a href=\"{basePath}{Uri.EscapeDataString(name)}/\">{WebUtility.HtmlEncode(name)}/</a></li>");
         }
 
         foreach (var file in Directory.GetFiles(directory).OrderBy(Path.GetFileName))
         {
             var name = Path.GetFileName(file);
-            builder.Append($"<li><a href=\"{Uri.EscapeDataString(name)}\">{WebUtility.HtmlEncode(name)}</a> ")
+            builder.Append($"<li><a href=\"{basePath}{Uri.EscapeDataString(name)}\">{WebUtility.HtmlEncode(name)}</a> ")
                    .Append($"<code>{FileOperations.FormatSize(FileOperations.SizeOf(file))}</code></li>");
         }
 

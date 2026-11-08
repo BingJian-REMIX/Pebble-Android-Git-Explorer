@@ -6,13 +6,14 @@ Android 优先的 Git 文件浏览器。技术栈：.NET MAUI + LibGit2Sharp，�
 
 前置：.NET SDK 10、`maui-android` / `maui-windows` workload、Android SDK、JDK 17。
 
-本机路径已写进 `Pebble.csproj`（`AndroidSdkDirectory` / `JavaSdkDirectory`），换机器删掉那两行即可。
+源码统一放在 `src/` 下；`Pebble.csproj` 已把本机 SDK 路径写进 `AndroidSdkDirectory` / `JavaSdkDirectory`，换机器删掉那两行、改用 `ANDROID_HOME` / `JAVA_HOME` 环境变量即可。
 
 ```bash
+cd src                                          # 工程目录
 dotnet build                                    # 全部目标
 dotnet run   -f net10.0-windows10.0.19041.0     # 桌面调试
 dotnet build -f net10.0-android                 # 出 APK
-# 产物：bin/Debug/net10.0-android/com.pebble.app-Signed.apk
+# 产物：src/bin/Debug/net10.0-android/com.pebble.app-Signed.apk
 ```
 
 ## 当前状态
@@ -28,7 +29,7 @@ dotnet build -f net10.0-android                 # 出 APK
 `LibGit2Sharp.NativeBinaries 2.0.324` 没有 android RID。.NET Android 的 RID 兜底会把 `linux-arm64` 的 **glibc** 产物复制成 `lib/arm64-v8a/libgit2-5853918.so`（`e_machine` 也是 AArch64，光看架构分辨不出来），真机 `dlopen` 必失败。所以：
 
 - csproj 里用 `PebbleDropForeignGit2` 这个 Target 在 `ResolvePackageAssets` 之后把 NuGet 的 `libgit2-5853918` 从 `NativeCopyLocalItems` / `RuntimeCopyLocalItems` 剔除，否则它会先占位（XA4301）
-- 真正的库来自 `Platforms/Android/libs/arm64-v8a/libgit2-5853918.so`（NDK r30 交叉编译）
+- 真正的库来自 `src/Platforms/Android/libs/arm64-v8a/libgit2-5853918.so`（NDK r30 交叉编译）
 
 当前产物：libgit2 **1.9.1** + mbedTLS 2.28.9 静态链接，`e_machine=0xB7`，只依赖 `libc.so` / `libdl.so`，无 `GLIBC_` 符号。
 
@@ -54,7 +55,7 @@ mbedTLS 3.6 的 tarball 缺 framework 子模块编不了，用 2.28.9。
 
 ### HTTPS 与 CA
 
-Android 没有 `/etc/ssl/certs`，mbedTLS 不会自动找到根证书。`TlsBootstrap` 首次启动把 `Resources/Raw/cacert.pem`（Mozilla 118 个根证书）复制到私有目录，再通过 `NativeGit` P/Invoke 调 `git_libgit2_opts(GIT_OPT_SET_SSL_CERT_LOCATIONS=12, file, NULL)` 交给 libgit2。拿不到 CA 不阻塞启动，只影响远程拉取。
+Android 没有 `/etc/ssl/certs`，mbedTLS 不会自动找到根证书。`TlsBootstrap` 首次启动把 `src/Resources/Raw/cacert.pem`（Mozilla 118 个根证书）复制到私有目录，再通过 `NativeGit` P/Invoke 调 `git_libgit2_opts(GIT_OPT_SET_SSL_CERT_LOCATIONS=12, file, NULL)` 交给 libgit2。拿不到 CA 不阻塞启动，只影响远程拉取。
 
 ## 交互
 
@@ -66,7 +67,7 @@ Android 没有 `/etc/ssl/certs`，mbedTLS 不会自动找到根证书。`TlsBoot
 | 多选态短按 | 切换该项选中，全取消则自动退出多选 |
 | 复制 / 移动 | 写入应用内剪贴板，底部出现「粘贴到此处」，此时 FAB 自动上移让位 |
 | 右下 Git FAB | 底部滑出抽屉：全部 M/U/D 文件 + 复选框 + Commit Message + Commit & Push；角标显示变更数 |
-| 右下 + FAB | 新建文件，支持 `src/a.cs` 直接建子目录 |
+| 右下 + FAB | 新建文件，支持 `docs/a.md` 直接建子目录 |
 
 实现要点：
 
@@ -108,17 +109,33 @@ Android 没有 `/etc/ssl/certs`，mbedTLS 不会自动找到根证书。`TlsBoot
 
 ```
 Pebble/
-├─ Models/FileItem.cs                 文件项 + GitFileStatus + 选中态
-├─ Services/GitService.cs             Clone / 状态 / Stage / Commit+Push / 原生库自检
-├─ Services/FileOperations.cs         复制 / 移动 / 删除 / 重命名 / 压缩
-├─ Services/TestRepoFactory.cs        演示仓库生成
-├─ Services/StoragePermission.cs      Android 存储权限适配
-├─ Services/TlsBootstrap.cs           Android CA bundle 注入
-├─ Services/NativeGit.cs              git_libgit2_opts 的 P/Invoke
-├─ Converters/GitStatusColorConverter.cs
-├─ MainPage.xaml(.cs)                 文件列表 + 多选栏 + FAB + Git 抽屉
-├─ EditorPage.xaml(.cs)               极简文本编辑器
-└─ Platforms/Android|Windows/
+├─ src/                               MAUI 工程根（Pebble.csproj 所在）
+│  ├─ App.xaml(.cs) / MauiProgram.cs  应用入口与初始化
+│  ├─ Pages/                         各界面
+│  │   ├─ MainPage.xaml(.cs)          文件列表 + 多选栏 + FAB + Git 抽屉
+│  │   ├─ EditorPage.xaml(.cs)        编辑器（缩放 / Markdown 预览 / 源码）
+│  │   ├─ ArchivePreviewPage.xaml(.cs) 压缩包多层预览
+│  │   ├─ ImagePreviewPage / SvgPreviewPage(.xaml.cs)  图片 / SVG 查看
+│  │   ├─ MediaPage(.xaml.cs)         音频 / 视频播放
+│  │   ├─ FontPreviewPage(.xaml.cs)   字体预览
+│  │   ├─ DiffPage(.xaml.cs)          变更 Diff
+│  │   └─ SettingsPage(.xaml.cs)      设置
+│  ├─ Services/                      业务服务
+│  │   ├─ GitService.cs               Clone / 状态 / Stage / Commit+Push / 原生库自检
+│  │   ├─ NativeGit.cs                git_libgit2_opts 的 P/Invoke
+│  │   ├─ FileOperations.cs           复制 / 移动 / 删除 / 重命名 / 压缩
+│  │   ├─ ArchiveService.cs           压缩包不解压列举（SharpCompress）
+│  │   ├─ LocalServerService.cs       本机文件共享服务器
+│  │   ├─ MarkdownPreview.cs / CodePreview.cs / SvgPreview.cs  各类预览渲染
+│  │   ├─ FileKinds.cs / BookmarkStore.cs / AppSettings.cs / AppLog.cs / StatusBar.cs
+│  │   ├─ StorageAccess.cs            Android 存储权限适配
+│  │   ├─ TlsBootstrap.cs             Android CA bundle 注入
+│  │   └─ TestRepoFactory.cs          演示仓库生成
+│  ├─ Models/FileItem.cs              文件项 + GitFileStatus + 选中态
+│  ├─ Converters/GitStatusColorConverter.cs
+│  ├─ Resources/                      AppIcon / Splash / Images(TDesign) / Fonts / Raw(cacert.pem)
+│  └─ Platforms/Android|Windows/
+└─ README.md / .gitignore / .gitattributes
 ```
 
 路径约定：仓库内相对路径一律 `/`，落盘时才转平台分隔符，`RepoPath.Combine` 拒绝 `../` 越界。

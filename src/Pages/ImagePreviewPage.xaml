@@ -2,6 +2,7 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:models="clr-namespace:Pebble.Models"
+             xmlns:toolkit="clr-namespace:CommunityToolkit.Maui.Behaviors;assembly=CommunityToolkit.Maui"
              x:Class="Pebble.ImagePreviewPage"
              BackgroundColor="#000000">
 
@@ -57,12 +58,15 @@
                 <Border.StrokeShape>
                     <Ellipse />
                 </Border.StrokeShape>
-                <Label Text="✕" FontSize="13" TextColor="#FFFFFF"
+                <Image Source="close" WidthRequest="14" HeightRequest="14"
                        HorizontalOptions="Center" VerticalOptions="Center">
-                    <Label.GestureRecognizers>
+                    <Image.Behaviors>
+                        <toolkit:IconTintColorBehavior TintColor="#FFFFFF" />
+                    </Image.Behaviors>
+                    <Image.GestureRecognizers>
                         <TapGestureRecognizer Tapped="OnCloseTapped" />
-                    </Label.GestureRecognizers>
-                </Label>
+                    </Image.GestureRecognizers>
+                </Image>
             </Border>
         </Grid>
 

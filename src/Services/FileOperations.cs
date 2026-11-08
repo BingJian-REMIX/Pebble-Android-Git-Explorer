@@ -327,7 +327,7 @@ public static class FileOperations
     }
 
     /// <summary>目标已存在时追加 " (n)"，避免覆盖用户数据。</summary>
-    private static string UniquePath(string path)
+    public static string UniquePath(string path)
     {
         if (!File.Exists(path) && !Directory.Exists(path)) return path;
 

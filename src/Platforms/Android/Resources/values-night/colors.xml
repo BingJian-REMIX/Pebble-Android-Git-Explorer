@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 深色主题下状态栏/App Bar 主色随主题变深，避免回落成浅色 -->
+    <color name="colorPrimary">#07090F</color>
+    <color name="colorPrimaryDark">#07090F</color>
+    <color name="colorAccent">#F59E42</color>
+</resources>

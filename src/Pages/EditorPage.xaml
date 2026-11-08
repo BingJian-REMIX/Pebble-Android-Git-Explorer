@@ -10,22 +10,18 @@
 
         <Grid RowDefinitions="Auto,*">
 
-            <!-- 顶部：文件名 + 体积 -->
+            <!-- 顶部：体积 + 位置（文件名已由导航栏标题承担，这里不再重复） -->
             <Grid Grid.Row="0"
                   ColumnDefinitions="*,Auto"
-                  Padding="{OnPlatform Default='16,12,16,8', Android='16,40,16,8'}"
+                  Padding="{OnPlatform Default='14,10,16,10', Android='16,10,16,10'}"
                   ColumnSpacing="12">
 
-                <VerticalStackLayout Spacing="2">
-                    <Label x:Name="NameLabel"
-                           FontSize="14"
-                           FontAttributes="Bold"
-                           LineBreakMode="MiddleTruncation"
-                           TextColor="{AppThemeBinding Light=#14161F, Dark=#E9ECF5}" />
-                    <Label x:Name="MetaLabel"
-                           FontSize="11"
-                           TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" />
-                </VerticalStackLayout>
+                <Label x:Name="MetaLabel"
+                       Grid.Column="0"
+                       FontSize="12"
+                       VerticalOptions="Center"
+                       LineBreakMode="MiddleTruncation"
+                       TextColor="{AppThemeBinding Light=#9AA1B2, Dark=#4C5468}" />
 
                 <Border Grid.Column="1"
                         IsVisible="False"
@@ -40,6 +36,12 @@
                     <Label Text="只读" FontSize="10" FontAttributes="Bold"
                            TextColor="{AppThemeBinding Light=#92400E, Dark=#FBBF24}" />
                 </Border>
+
+                <!-- 分隔线：标题区与代码内容之间留出清晰边界，避免无缝贴连 -->
+                <BoxView Grid.ColumnSpan="2"
+                         HeightRequest="1"
+                         VerticalOptions="End"
+                         BackgroundColor="{AppThemeBinding Light=#E3E8F0, Dark=#1E2434}" />
             </Grid>
 
             <!-- 给底部操作栏留出空间 -->
@@ -47,6 +49,50 @@
                      x:Name="View"
                      Margin="0,0,0,86"
                      BackgroundColor="{AppThemeBinding Light=#F7F8FC, Dark=#07090F}" />
+
+            <!-- 缩放控制（浮在编辑器右上角）：捏合或按钮均可缩放 -->
+            <Border Grid.Row="1"
+                    VerticalOptions="Start"
+                    HorizontalOptions="End"
+                    ZIndex="6"
+                    Margin="0,8,12,0"
+                    Padding="4"
+                    StrokeThickness="1"
+                    BackgroundColor="{AppThemeBinding Light=#FFFFFF, Dark=#10131C}"
+                    Stroke="{AppThemeBinding Light=#DCE1EC, Dark=#1E2434}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="12" />
+                </Border.StrokeShape>
+                <HorizontalStackLayout Spacing="2">
+                    <Button x:Name="ZoomOutButton"
+                            Text="−"
+                            FontSize="18"
+                            WidthRequest="36" HeightRequest="36"
+                            Padding="0"
+                            CornerRadius="10"
+                            BorderWidth="0"
+                            Clicked="OnZoomOut"
+                            BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Light=#5B4BE0, Dark=#C4B5FD}" />
+                    <Label x:Name="ZoomLabel"
+                           Text="100%"
+                           FontSize="12"
+                           VerticalOptions="Center"
+                           WidthRequest="46"
+                           HorizontalTextAlignment="Center"
+                           TextColor="{AppThemeBinding Light=#6B7280, Dark=#9AA1B2}" />
+                    <Button x:Name="ZoomInButton"
+                            Text="+"
+                            FontSize="18"
+                            WidthRequest="36" HeightRequest="36"
+                            Padding="0"
+                            CornerRadius="10"
+                            BorderWidth="0"
+                            Clicked="OnZoomIn"
+                            BackgroundColor="Transparent"
+                            TextColor="{AppThemeBinding Light=#5B4BE0, Dark=#C4B5FD}" />
+                </HorizontalStackLayout>
+            </Border>
         </Grid>
 
         <!-- 底部操作栏 -->
